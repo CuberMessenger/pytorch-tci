@@ -3,6 +3,34 @@ import torch
 from typing import List, Tuple, Union
 
 
+def try_pivot(matrix: torch.Tensor, I: List[int], J: List[int], i: int, j: int) -> None:
+    # TODO: use partial LU to compute
+    pass
+
+
+
+def full_search(
+    matrix: torch.Tensor, approximation: torch.Tensor
+) -> Tuple[int, int, float]:
+    """
+    Performs a full search to find the next pivot for cross-interpolation.
+
+    This function returns the indices of the new pivot along with the absolute error.
+
+    Args:
+        matrix (torch.Tensor): The 2D input matrix to interpolate.
+        approximation (torch.Tensor): The current approximation of the matrix.
+    """
+
+    error_matrix = (matrix - approximation).abs()
+
+    i_star, j_star = torch.unravel_index(
+        torch.argmax(error_matrix), error_matrix.size()
+    )
+
+    return i_star.item(), j_star.item(), error_matrix[i_star, j_star].item()
+
+
 def ci(
     matrix: torch.Tensor, error_threshold: float = 1e-3
 ) -> Tuple[List[int], List[int]]:
@@ -31,19 +59,18 @@ def ci(
     if matrix.dim() != 2:
         raise ValueError("Input matrix must be a 2D tensor.")
 
+    num_rows = matrix.size(0)
+    num_cols = matrix.size(1)
+
     I: List[int] = []
     J: List[int] = []
 
     approximation = torch.zeros_like(matrix, dtype=matrix.dtype)
 
-    while True:
-        error_matrix = (matrix - approximation).abs()
+    while len(I) < num_rows and len(J) < num_cols:
+        i_star, j_star, error = full_search(matrix, approximation)
 
-        i_star, j_star = torch.unravel_index(
-            torch.argmax(error_matrix), error_matrix.size()
-        )
-
-        if error_matrix[i_star, j_star] < error_threshold:
+        if error < error_threshold:
             break
 
         I.append(i_star.item())
