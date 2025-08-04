@@ -5,7 +5,7 @@
 For a given matrix $\mathbf{A} \in \mathbb{R}^{m \times n}$, the cross interpolation is defined as:
 
 $$
-\mathbf{A} \approx \mathbf{\tilde{A}} = \mathbf{A}\left(\mathbb{I}, J\right) \mathbf{A}\left(I, J\right) \mathbf{A}\left(I, \mathbb{J}\right),
+\mathbf{A} \approx \mathbf{\tilde{A}} = \mathbf{A}(\mathbb{I}, J) \mathbf{A}(I, J)^{-1} \mathbf{A}(I, \mathbb{J}),
 $$
 
 where $\mathbb{I} = \{1, 2, ..., m\}$ and $\mathbb{J} = \{1, 2, ..., n\}$, while $I \subseteq \mathbb{I}$ and $J \subseteq \mathbb{J}$ with $|I| = |J| = r$.
@@ -30,7 +30,11 @@ Here, it first implements a ``full search`` algorithm to find the optimal sets $
 
 First, define an error function (matrix) as:
 $$
-\mathcal{E}(i, j) = |\mathbf{A} - \mathbf{\tilde{A}}|(i, j)
+\begin{align*}
+    \mathcal{E}(i, j) &= |\mathbf{A} - \mathbf{\tilde{A}}|(i, j) \\
+    &= |\mathbf{A}(i, j) - \mathbf{\tilde{A}}(i, j)| \\
+    &= |\mathbf{A}(i, j) - \mathbf{A}(i, J) \mathbf{A}(I, J)^{-1} \mathbf{A}(I, j)| \\
+\end{align*}
 $$
 where $i \in \mathbb{I} \setminus I$ and $j \in \mathbb{J} \setminus J$.
 

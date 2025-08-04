@@ -7,3 +7,9 @@ This repository implements **Tensor Cross Interpolation** algorithm upon the **P
 - Y. N. Fernández et al., “Learning Feynman Diagrams with Tensor Trains,” 2022.
 
 
+# TODO list
+- [ ] Implement the **Cross Interpolation** algorithm.
+- [ ] Implement the **Tensor Cross Interpolation** algorithm.
+- [ ] Revise the implementation with partial rank-revealing LU decomposition for better numerical stability.
+
+
