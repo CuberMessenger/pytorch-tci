@@ -8,8 +8,11 @@ This repository implements **Tensor Cross Interpolation** algorithm upon the **P
 
 
 # TODO list
-- [ ] Implement the **Cross Interpolation** algorithm.
-- [ ] Implement the **Tensor Cross Interpolation** algorithm.
+- [ ] Implement the **Cross Interpolation** algorithm without memory limit.
+- [ ] Implement the **Tensor Cross Interpolation** algorithm without memory limit.
+- [ ] Implement the **Cross Interpolation** algorithm with memory limit.
+- [ ] Implement the **Tensor Cross Interpolation** algorithm with memory limit.
 - [ ] Revise the implementation with partial rank-revealing LU decomposition for better numerical stability.
 
-
+# Notes
+- With a little pre-experiments, it seems rook search cost less runtime memory even when the full tensor fits in memory.

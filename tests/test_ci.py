@@ -4,7 +4,7 @@ from pytorch_tci import ci
 
 
 def prepare_test_matrix(N, r):
-    return torch.rand((N, r)) @ torch.rand((r, N)) + torch.rand((N, N)) * 1e-3
+    return torch.rand((N, r)) @ torch.rand((r, N))
 
 
 def test_ci(matrix, method):
@@ -14,27 +14,30 @@ def test_ci(matrix, method):
 
     time_cost = (end_time - start_time) / 1e6  # ms
 
-    # relative_error = torch.norm(
-    #     matrix - matrix[:, J] @ torch.linalg.inv(matrix[I, :][:, J]) @ matrix[I, :]
-    # ) / torch.norm(matrix)
     relative_error = torch.norm(
-        matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :]
+        matrix - matrix[:, J] @ torch.linalg.inv(matrix[I, :][:, J]) @ matrix[I, :]
     ) / torch.norm(matrix)
+    # relative_error = torch.norm(
+    #     matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :]
+    # ) / torch.norm(matrix)
+
+    inv_diff = torch.norm(torch.linalg.inv(matrix[I, :][:, J]) - pivots_inverse)
 
     print("Num of pivots:", len(I))
     print("Selected row indices:", I[:5], "..." if len(I) > 5 else "")
     print("Selected column indices:", J[:5], "..." if len(J) > 5 else "")
     print("Relative approximation error:", relative_error.item())
+    print("Inverse difference:", inv_diff.item())
     print("Time cost:", time_cost, "ms")
 
 
 def main():
-    N = 100
+    N = 60
     r = 20
     matrix = prepare_test_matrix(N, r)
     matrix = matrix.cuda()
-    print("Testing CI with full search method:")
-    test_ci(matrix, method="full")
+    # print("Testing CI with full search method:")
+    # test_ci(matrix, method="full")
 
     print("\nTesting CI with rook search method:")
     test_ci(matrix, method="rook")

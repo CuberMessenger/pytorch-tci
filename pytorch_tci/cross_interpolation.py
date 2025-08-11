@@ -50,22 +50,22 @@ def full_search(
 ) -> Tuple[int, int, float]:
 
     ### This way need the whole matrix fits in memory
-    # error_full = error_matrix_full(matrix, pivots_inverse, I, J)
-    # i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
-    # i_star, j_star = i_star.item(), j_star.item()
-    # max_error = error_full[i_star, j_star].item()
+    error_full = error_matrix_full(matrix, pivots_inverse, I, J)
+    i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
+    i_star, j_star = i_star.item(), j_star.item()
+    max_error = error_full[i_star, j_star].item()
 
-    i_star, j_star = None, None
-    max_error = 0.0
-    for i in range(matrix.size(0)):
-        for j in range(matrix.size(1)):
-            if (i, j) not in zip(I, J):
-                current_error = error_matrix_element(
-                    matrix, pivots_inverse, I, J, i, j
-                ).item()
-                if current_error > max_error:
-                    max_error = current_error
-                    i_star, j_star = i, j
+    # i_star, j_star = None, None
+    # max_error = 0.0
+    # for i in range(matrix.size(0)):
+    #     for j in range(matrix.size(1)):
+    #         if (i, j) not in zip(I, J):
+    #             current_error = error_matrix_element(
+    #                 matrix, pivots_inverse, I, J, i, j
+    #             ).item()
+    #             if current_error > max_error:
+    #                 max_error = current_error
+    #                 i_star, j_star = i, j
 
     return i_star, j_star, max_error
 
@@ -219,7 +219,7 @@ def ci(
     pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
     while len(I) < num_rows and len(J) < num_cols:
-        print(f"Num of pivots: {len(I)} ......")
+        # print(f"Num of pivots: {len(I)} ......")
 
         i_star, j_star, error = searcher(matrix, pivots_inverse, I, J)
 
