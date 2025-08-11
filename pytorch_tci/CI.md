@@ -55,3 +55,49 @@ $$
 $$
 where $\|\cdot\|_{\xi}$ is a norm (e.g., Frobenius norm) and $\epsilon$ is a predefined threshold.
 
+## Implementation tips
+Given a invertible matrix $\mathbf{U} \in \mathbb{R}^{k \times k}$ and the inverse $\mathbf{U}^{-1}$, and consider the following block matrix
+
+$$
+\mathbf{M} = \begin{pmatrix}
+    \mathbf{U} & \mathbf{c} \\
+    \mathbf{r} & p
+\end{pmatrix} \in \mathbb{R}^{(k + 1) \times (k + 1)}
+$$
+
+where
+
+$$
+\begin{align*}
+    \mathbf{c} &\in \mathbb{R}^{k \times 1}, \\
+    \mathbf{r} &\in \mathbb{R}^{1 \times k}, \\
+    p &\in \mathbb{R}.
+\end{align*}
+$$
+
+Then the inverse of $\mathbf{M}$ can be computed as
+
+$$
+\begin{align*}
+    \mathbf{M}^{-1} &= \begin{pmatrix}
+        \mathbf{U}^{-1} + \mathbf{U}^{-1} \mathbf{c} s^{-1} \mathbf{r} \mathbf{U}^{-1} & -\mathbf{U}^{-1} \mathbf{c} s^{-1} \\
+        -s^{-1} \mathbf{r} \mathbf{U}^{-1} & s^{-1}
+    \end{pmatrix} \in \mathbb{R}^{(k + 1) \times (k + 1)} \\
+    &= \begin{pmatrix}
+        \mathbf{U}^{-1} + \mathbf{l} s^{-1} \mathbf{h} & -\mathbf{l} s^{-1} \\
+        -s^{-1} \mathbf{h} & s^{-1}
+    \end{pmatrix}
+\end{align*}
+$$
+
+where
+
+$$
+\begin{align*}
+    \mathbf{l} &= \mathbf{U}^{-1} \mathbf{c} \in \mathbb{R}^{k \times 1}, \\
+    \mathbf{h} &= \mathbf{r} \mathbf{U}^{-1} \in \mathbb{R}^{1 \times k}, \\
+    s &= p - \mathbf{r} \mathbf{U}^{-1} \mathbf{c} \in \mathbb{R}.
+\end{align*}
+$$
+
+In the above equations, $s$ is actually the schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.

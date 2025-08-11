@@ -46,16 +46,28 @@ def error_matrix_full(
 
 
 def full_search(
-    matrix: torch.Tensor, I: List[int], J: List[int]
+    matrix: torch.Tensor, pivots_inverse: torch.Tensor, I: List[int], J: List[int]
 ) -> Tuple[int, int, float]:
 
-    pivots_inverse = torch.inverse(matrix[I, :][:, J])
+    ### This way need the whole matrix fits in memory
+    # error_full = error_matrix_full(matrix, pivots_inverse, I, J)
+    # i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
+    # i_star, j_star = i_star.item(), j_star.item()
+    # max_error = error_full[i_star, j_star].item()
 
-    error_full = error_matrix_full(matrix, pivots_inverse, I, J)
+    i_star, j_star = None, None
+    max_error = 0.0
+    for i in range(matrix.size(0)):
+        for j in range(matrix.size(1)):
+            if (i, j) not in zip(I, J):
+                current_error = error_matrix_element(
+                    matrix, pivots_inverse, I, J, i, j
+                ).item()
+                if current_error > max_error:
+                    max_error = current_error
+                    i_star, j_star = i, j
 
-    i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
-
-    return i_star.item(), j_star.item(), error_full[i_star, j_star].item()
+    return i_star, j_star, max_error
 
 
 class RookStatus(Enum):
@@ -102,11 +114,13 @@ def random_initial_pivot(
 
 
 def rook_search(
-    matrix: torch.Tensor, I: List[int], J: List[int], max_iteration: int = 10
+    matrix: torch.Tensor,
+    pivots_inverse: torch.Tensor,
+    I: List[int],
+    J: List[int],
+    max_iteration: int = 10,
 ) -> Tuple[int, int, float]:
     # TODO: this function need efficiency improvements
-
-    pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
     # pick the initial pivot
     i_star, j_star = random_initial_pivot(matrix, pivots_inverse, I, J)
@@ -202,14 +216,51 @@ def ci(
 
     I: List[int] = []
     J: List[int] = []
+    pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
     while len(I) < num_rows and len(J) < num_cols:
-        i_star, j_star, error = searcher(matrix, I, J)
+        print(f"Num of pivots: {len(I)} ......")
+
+        i_star, j_star, error = searcher(matrix, pivots_inverse, I, J)
 
         if error < error_threshold:
             break
 
+        # try:
+        #     pivots_inverse = torch.inverse(matrix[I + [i_star], :][:, J + [j_star]])
+        # except Exception as e:
+        #     print(f"Stop interpolation due to: {e}")
+        #     break
+        U_inv = pivots_inverse
+        c = matrix[I, j_star][:, torch.newaxis]
+        r = matrix[i_star, J][torch.newaxis, :]
+        p = matrix[i_star, j_star]
+
+        s = p - r @ U_inv @ c
+        if s.abs() < 1e-2:
+            print(
+                f"Stop due to small schur complement {s.item():.3e} at ({i_star}, {j_star})"
+            )
+            break
+        # print(s)
+
+        l = U_inv @ c
+        h = r @ U_inv
+
+        M_inv = torch.zeros(
+            (len(I) + 1, len(J) + 1), dtype=matrix.dtype, device=matrix.device
+        )
+
+        M_inv = torch.vstack(
+            [
+                torch.hstack([U_inv + l @ (1 / s) @ h, -l @ (1 / s)]),
+                torch.hstack([-(1 / s) @ h, 1 / s]),
+            ]
+        )
+
+        pivots_inverse = M_inv
+
         I.append(i_star)
         J.append(j_star)
 
-    return I, J
+    return I, J, pivots_inverse
