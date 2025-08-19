@@ -100,4 +100,4 @@ $$
 \end{align*}
 $$
 
-In the above equations, $s$ is actually the schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.
+In the above equations, $s$ is actually the Schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.
