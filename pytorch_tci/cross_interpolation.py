@@ -175,18 +175,11 @@ def ci(
     pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
     while len(I) < num_rows and len(J) < num_cols:
-        # print(f"Num of pivots: {len(I)} ......")
-
         i_star, j_star, error = searcher(matrix, pivots_inverse, I, J)
 
         if error < error_threshold:
             break
 
-        # try:
-        #     pivots_inverse = torch.inverse(matrix[I + [i_star], :][:, J + [j_star]])
-        # except Exception as e:
-        #     print(f"Stop interpolation due to: {e}")
-        #     break
         U_inv = pivots_inverse
         c = matrix[I, j_star][:, torch.newaxis]
         r = matrix[i_star, J][torch.newaxis, :]
@@ -198,7 +191,6 @@ def ci(
             #     f"Stop due to small schur complement {s.item():.3e} at ({i_star}, {j_star})"
             # )
             break
-        # print(s)
 
         l = U_inv @ c
         h = r @ U_inv
