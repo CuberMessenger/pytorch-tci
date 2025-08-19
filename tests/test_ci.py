@@ -5,7 +5,7 @@ from pytorch_tci import ci
 
 
 def prepare_test_matrix(N, r):
-    return torch.rand((N, r)) @ torch.rand((r, N))
+    return torch.rand((N, r)) @ torch.rand((r, N)) # + torch.rand((N, N)) * 1e-2
 
 
 def test_ci_single(matrix, method):
@@ -20,7 +20,8 @@ def test_ci_single(matrix, method):
     try:
         pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
         inverse_difference = torch.norm(pivots_inverse_schur - pivots_inverse).item()
-    except Exception:
+    except Exception as e:
+        print(e)
         pivots_inverse = pivots_inverse_schur
         inverse_difference = None
 
@@ -69,7 +70,7 @@ def main():
     N, r = 120, 20
     N, r = 240, 60
 
-    # test_ci(N, r, method="full", num_iterations=16)
+    test_ci(N, r, method="full", num_iterations=16)
     test_ci(N, r, method="rook", num_iterations=16)
 
     """

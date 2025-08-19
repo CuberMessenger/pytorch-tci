@@ -30,9 +30,9 @@ $$
 First, define an error function (matrix) as:
 $$
 \begin{align*}
-    \mathcal{E}(i, j) &= |\mathbf{A} - \mathbf{\tilde{A}}|(i, j) \\
-    &= |\mathbf{A}(i, j) - \mathbf{\tilde{A}}(i, j)| \\
-    &= |\mathbf{A}(i, j) - \mathbf{A}(i, J) \mathbf{A}(I, J)^{-1} \mathbf{A}(I, j)| \\
+    \mathcal{E}(i, j) &= \text{abs}(\mathbf{A} - \mathbf{\tilde{A}})(i, j) \\
+    &= \text{abs}(\mathbf{A}(i, j) - \mathbf{\tilde{A}}(i, j)) \\
+    &= \text{abs}(\mathbf{A}(i, j) - \mathbf{A}(i, J) \mathbf{A}(I, J)^{-1} \mathbf{A}(I, j)) \\
 \end{align*}
 $$
 where $i \in \mathbb{I} \setminus I$ and $j \in \mathbb{J} \setminus J$.
