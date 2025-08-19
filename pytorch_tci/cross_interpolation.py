@@ -10,8 +10,8 @@ import time
 def error_matrix_element(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: torch.Tensor,
-    J: torch.Tensor,
+    I: List[int],
+    J: List[int],
     i: torch.Tensor,
     j: torch.Tensor,
 ) -> torch.Tensor:
@@ -21,8 +21,8 @@ def error_matrix_element(
 def error_matrix_row(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: torch.Tensor,
-    J: torch.Tensor,
+    I: List[int],
+    J: List[int],
     i: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix[i, :] - (matrix[i, J] @ pivots_inverse) @ matrix[I, :])
@@ -31,8 +31,8 @@ def error_matrix_row(
 def error_matrix_column(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: torch.Tensor,
-    J: torch.Tensor,
+    I: List[int],
+    J: List[int],
     j: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix[:, j] - matrix[:, J] @ (pivots_inverse @ matrix[I, j]))
@@ -41,14 +41,14 @@ def error_matrix_column(
 def error_matrix_full(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: torch.Tensor,
-    J: torch.Tensor,
+    I: List[int],
+    J: List[int],
 ) -> torch.Tensor:
     return torch.abs(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
 
 
 def full_search(
-    matrix: torch.Tensor, pivots_inverse: torch.Tensor, I: torch.Tensor, J: torch.Tensor
+    matrix: torch.Tensor, pivots_inverse: torch.Tensor, I: List[int], J: List[int]
 ) -> Tuple[int, int, float]:
 
     ### This way need the whole matrix fits in memory
@@ -67,8 +67,8 @@ class RookCondition(Enum):
 def rook_search(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: torch.Tensor,
-    J: torch.Tensor,
+    I: List[int],
+    J: List[int],
     max_iteration: int = 4,
 ) -> Tuple[int, int, float]:
 
@@ -129,7 +129,7 @@ def rook_search(
 
 def ci(
     matrix: torch.Tensor, method: str = "rook", error_threshold: float = 1e-3
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[List[int], List[int], torch.Tensor]:
     """
     Performs matrix cross-interpolation on a given 2D tensor.
 
@@ -169,12 +169,12 @@ def ci(
     num_rows = matrix.size(0)
     num_cols = matrix.size(1)
 
-    I = torch.zeros((0,), dtype=torch.int32, device=matrix.device)
-    J = torch.zeros((0,), dtype=torch.int32, device=matrix.device)
+    I: List[int] = []
+    J: List[int] = []
 
     pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
-    while I.numel() < num_rows and J.numel() < num_cols:
+    while len(I) < num_rows and len(J) < num_cols:
         i_star, j_star, error = searcher(matrix, pivots_inverse, I, J)
 
         if error < error_threshold:
@@ -208,7 +208,7 @@ def ci(
 
         pivots_inverse = M_inv
 
-        I = torch.cat([I, i_star[torch.newaxis, ...]])
-        J = torch.cat([J, j_star[torch.newaxis, ...]])
+        I.append(i_star.item())
+        J.append(j_star.item())
 
     return I, J, pivots_inverse
