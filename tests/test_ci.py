@@ -93,6 +93,11 @@ def main():
     Results of testing rook for 16 iterations:
     Relative error: 1.7880853192764334e-05 ± 4.505314336711308e-06
     Time cost: 164.36334228515625 ± 7.421230792999268
+
+    [de11dde9967ca0fb565d714308787c58db45f413]
+    Results of testing rook for 16 iterations:
+    Relative error: 1.906374382087961e-05 ± 6.024765298207058e-06
+    Time cost: 197.83612060546875 ± 12.512357711791992
     """
 
 
