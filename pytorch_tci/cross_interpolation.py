@@ -12,8 +12,8 @@ def error_matrix_element(
     pivots_inverse: torch.Tensor,
     I: List[int],
     J: List[int],
-    i: torch.Tensor,
-    j: torch.Tensor,
+    i: int,
+    j: int,
 ) -> torch.Tensor:
     return torch.abs(matrix[i, j] - matrix[i, J] @ pivots_inverse @ matrix[I, j])
 
@@ -23,7 +23,7 @@ def error_matrix_row(
     pivots_inverse: torch.Tensor,
     I: List[int],
     J: List[int],
-    i: torch.Tensor,
+    i: int,
 ) -> torch.Tensor:
     return torch.abs(matrix[i, :] - (matrix[i, J] @ pivots_inverse) @ matrix[I, :])
 
@@ -33,7 +33,7 @@ def error_matrix_column(
     pivots_inverse: torch.Tensor,
     I: List[int],
     J: List[int],
-    j: torch.Tensor,
+    j: int,
 ) -> torch.Tensor:
     return torch.abs(matrix[:, j] - matrix[:, J] @ (pivots_inverse @ matrix[I, j]))
 
@@ -54,7 +54,8 @@ def full_search(
     ### This way need the whole matrix fits in memory
     error_full = error_matrix_full(matrix, pivots_inverse, I, J)
     i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
-    max_error = error_full[i_star, j_star]
+    i_star, j_star = i_star.item(), j_star.item()
+    max_error = error_full[i_star, j_star].item()
 
     return i_star, j_star, max_error
 
@@ -73,29 +74,29 @@ def rook_search(
 ) -> Tuple[int, int, float]:
 
     # pick the initial pivot
-    i_star = torch.randint(0, matrix.size(0), (), device=matrix.device)
-    j_star = torch.zeros_like(i_star)
+    i_star = torch.randint(0, matrix.size(0), (1,)).item()
+    j_star = 0
     max_error = 0
 
     def rook_row():
         nonlocal i_star, j_star, max_error
         error_row = error_matrix_row(matrix, pivots_inverse, I, J, i_star)
-        next_j = torch.argmax(error_row)
+        next_j = torch.argmax(error_row).item()
 
         moved = next_j != j_star
         j_star = next_j
-        max_error = error_row[j_star]
+        max_error = error_row[j_star].item()
 
         return moved
 
     def rook_column():
         nonlocal i_star, j_star, max_error
         error_column = error_matrix_column(matrix, pivots_inverse, I, J, j_star)
-        next_i = torch.argmax(error_column)
+        next_i = torch.argmax(error_column).item()
 
         moved = next_i != i_star
         i_star = next_i
-        max_error = error_column[i_star]
+        max_error = error_column[i_star].item()
 
         return moved
 
@@ -129,7 +130,7 @@ def rook_search(
 
 def ci(
     matrix: torch.Tensor, method: str = "rook", error_threshold: float = 1e-3
-) -> Tuple[List[int], List[int], torch.Tensor]:
+) -> Tuple[List[int], List[int]]:
     """
     Performs matrix cross-interpolation on a given 2D tensor.
 
@@ -171,7 +172,6 @@ def ci(
 
     I: List[int] = []
     J: List[int] = []
-
     pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
     while len(I) < num_rows and len(J) < num_cols:
@@ -208,7 +208,7 @@ def ci(
 
         pivots_inverse = M_inv
 
-        I.append(i_star.item())
-        J.append(j_star.item())
+        I.append(i_star)
+        J.append(j_star)
 
     return I, J, pivots_inverse
