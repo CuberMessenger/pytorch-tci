@@ -4,6 +4,8 @@ import torch
 from typing import List, Tuple, Union, Optional
 from enum import Enum, auto
 
+import time
+
 
 def error_matrix_element(
     matrix: torch.Tensor,
@@ -23,7 +25,7 @@ def error_matrix_row(
     J: List[int],
     i: int,
 ) -> torch.Tensor:
-    return torch.abs(matrix[i, :] - matrix[i, J] @ pivots_inverse @ matrix[I, :])
+    return torch.abs(matrix[i, :] - (matrix[i, J] @ pivots_inverse) @ matrix[I, :])
 
 
 def error_matrix_column(
@@ -33,7 +35,7 @@ def error_matrix_column(
     J: List[int],
     j: int,
 ) -> torch.Tensor:
-    return torch.abs(matrix[:, j] - matrix[:, J] @ pivots_inverse @ matrix[I, j])
+    return torch.abs(matrix[:, j] - matrix[:, J] @ (pivots_inverse @ matrix[I, j]))
 
 
 def error_matrix_full(
@@ -58,47 +60,9 @@ def full_search(
     return i_star, j_star, max_error
 
 
-class RookStatus(Enum):
-    RULES = auto()
-    NOT_RULES = auto()
-    UNKNOWN = auto()
-
-
-def random_initial_pivot(
-    matrix: torch.Tensor,
-    pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
-    num_pivots: Optional[int] = None,
-) -> Tuple[int, int]:
-    if num_pivots is None:
-        num_pivots = int(round(math.log10(matrix.numel())))
-
-    def is_valid(i: int, j: int) -> bool:
-        if i in I:
-            index = I.index(i)
-            if j == J[index]:
-                return False
-            else:
-                return True
-        else:
-            return True
-
-    max_error = 0.0
-    i_star, j_star = 0, 0
-    while num_pivots > 0:
-        random_index = torch.randint(0, matrix.numel(), (1,)).item()
-        i = random_index // matrix.size(1)
-        j = random_index % matrix.size(1)
-
-        if is_valid(i, j):
-            error = error_matrix_element(matrix, pivots_inverse, I, J, i, j)
-            if error > max_error:
-                max_error = error
-                i_star, j_star = i, j
-            num_pivots -= 1
-
-    return i_star, j_star
+class RookCondition(Enum):
+    RULES_ROW = auto()
+    RULES_COLUMN = auto()
 
 
 def rook_search(
@@ -106,58 +70,62 @@ def rook_search(
     pivots_inverse: torch.Tensor,
     I: List[int],
     J: List[int],
-    max_iteration: int = 10,
+    max_iteration: int = 4,
 ) -> Tuple[int, int, float]:
-    # TODO: this function need efficiency improvements
 
     # pick the initial pivot
-    i_star, j_star = random_initial_pivot(matrix, pivots_inverse, I, J)
+    i_star = torch.randint(0, matrix.size(0), (1,)).item()
+    j_star = 0
+    max_error = 0
+
+    def rook_row():
+        nonlocal i_star, j_star, max_error
+        error_row = error_matrix_row(matrix, pivots_inverse, I, J, i_star)
+        next_j = torch.argmax(error_row).item()
+
+        moved = next_j != j_star
+        j_star = next_j
+        max_error = error_row[j_star].item()
+
+        return moved
+
+    def rook_column():
+        nonlocal i_star, j_star, max_error
+        error_column = error_matrix_column(matrix, pivots_inverse, I, J, j_star)
+        next_i = torch.argmax(error_column).item()
+
+        moved = next_i != i_star
+        i_star = next_i
+        max_error = error_column[i_star].item()
+
+        return moved
 
     # rook search
-    row_status = RookStatus.UNKNOWN  # status of the pivot in its row
-    column_status = RookStatus.UNKNOWN  # status of the pivot in its column
-    for index in range(max_iteration):
-        if index % 2 == 0:
-            # rook row-wise
-            error_row = error_matrix_row(matrix, pivots_inverse, I, J, i_star)
-            next_j = torch.argmax(error_row).item()
+    rook_row()
+    rook_condition = RookCondition.RULES_ROW
 
-            row_status = RookStatus.RULES
-            if next_j != j_star:
-                column_status = RookStatus.UNKNOWN
-            j_star = next_j
-        else:
-            # rook column-wise
-            error_column = error_matrix_column(matrix, pivots_inverse, I, J, j_star)
-            next_i = torch.argmax(error_column).item()
+    for _ in range(max_iteration - 1):
+        if rook_condition is RookCondition.RULES_ROW:
+            moved = rook_column()
 
-            column_status = RookStatus.RULES
-            if next_i != i_star:
-                row_status = RookStatus.UNKNOWN
-            i_star = next_i
-
-        if row_status is RookStatus.UNKNOWN:
-            error_row = error_matrix_row(matrix, pivots_inverse, I, J, i_star)
-            if torch.argmax(error_row).item() == j_star:
-                row_status = RookStatus.RULES
+            if moved:
+                rook_condition = RookCondition.RULES_COLUMN
             else:
-                row_status = RookStatus.NOT_RULES
+                break
 
-        if column_status is RookStatus.UNKNOWN:
-            error_column = error_matrix_column(matrix, pivots_inverse, I, J, j_star)
-            if torch.argmax(error_column).item() == i_star:
-                column_status = RookStatus.RULES
+            continue
+
+        if rook_condition is RookCondition.RULES_COLUMN:
+            moved = rook_row()
+
+            if moved:
+                rook_condition = RookCondition.RULES_ROW
             else:
-                column_status = RookStatus.NOT_RULES
+                break
 
-        if (row_status is RookStatus.RULES) and (column_status is RookStatus.RULES):
-            break
+            continue
 
-    return (
-        i_star,
-        j_star,
-        error_matrix_element(matrix, pivots_inverse, I, J, i_star, j_star).item(),
-    )
+    return i_star, j_star, max_error
 
 
 def ci(
@@ -226,9 +194,9 @@ def ci(
 
         s = p - r @ U_inv @ c
         if s.abs() < 1e-2:
-            print(
-                f"Stop due to small schur complement {s.item():.3e} at ({i_star}, {j_star})"
-            )
+            # print(
+            #     f"Stop due to small schur complement {s.item():.3e} at ({i_star}, {j_star})"
+            # )
             break
         # print(s)
 

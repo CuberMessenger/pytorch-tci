@@ -26,7 +26,6 @@ $$
 $$
 
 ## Algorithm
-Here, it first implements a ``full search`` algorithm to find the optimal sets $I$ and $J$.
 
 First, define an error function (matrix) as:
 $$
@@ -38,12 +37,15 @@ $$
 $$
 where $i \in \mathbb{I} \setminus I$ and $j \in \mathbb{J} \setminus J$.
 
+### Full Search
+Here, it first implements a ``full search`` algorithm to find the optimal sets $I$ and $J$.
+
 Then the algorithm goes as follows:
 
 1. Find a point $(i, j)$ that maximizes $\mathcal{E}(i, j)$:
 
 $$
-i^*, j^* = \argmax_{i \in \mathbb{I} \setminus I, j \in \mathbb{J} \setminus J} \mathcal{E}(i, j).
+(i^*, j^*) = \argmax_{i \in \mathbb{I}, j \in \mathbb{J}} \mathcal{E}(i, j).
 $$
 2. Add the point $(i^*, j^*)$ to the sets $I$ and $J$:
 $$
@@ -54,6 +56,41 @@ $$
 \|\mathbf{\mathcal{E}}\|_{\xi} < \epsilon,
 $$
 where $\|\cdot\|_{\xi}$ is a norm (e.g., Frobenius norm) and $\epsilon$ is a predefined threshold.
+
+### Rook Search
+Then, implements the ``rook search`` algorithm goes as:
+
+1. Randomly initialize a new pivot $(i^*, j^*)$.
+2. Column-wise movement:
+
+$$
+i^* \leftarrow \argmax_{i \in \mathbb{I}} \mathcal{E}(i, j^*).
+$$
+
+3. Row-wise movement:
+
+$$
+j^* \leftarrow \argmax_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
+$$
+
+4. Repeat steps 2 and 3 until the limit of iterations is reached or the following condition (rook condition) is met:
+
+$$
+\begin{align*}
+    i^* &= \argmax_{i \in \mathbb{I}} \mathcal{E}(i, j^*), \\
+    j^* &= \argmax_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
+\end{align*}
+$$
+
+5. Add the point $(i^*, j^*)$ to the sets $I$ and $J$:
+$$
+I \leftarrow I \cup \{i^*\}, \quad J \leftarrow J \cup \{j^*\}.
+$$
+
+6. Repeat steps 1 to 5 until the interpolation error satisfies a predefined threshold:
+$$
+\|\mathbf{\mathcal{E}}\|_{\xi} < \epsilon.
+$$
 
 ## Implementation tips
 Given a invertible matrix $\mathbf{U} \in \mathbb{R}^{k \times k}$ and the inverse $\mathbf{U}^{-1}$, and consider the following block matrix

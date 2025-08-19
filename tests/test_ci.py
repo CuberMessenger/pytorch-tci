@@ -79,10 +79,15 @@ def main():
     Relative error: 1.6688509276718833e-05 ± 3.640356453615823e-06
     Time cost: 110.21920776367188 ± 5.356021881103516
 
-    []
+    [ce3f161271e50d5b3d50252ea37722d6359de404]
     Results of testing rook for 16 iterations:
     Relative error: 1.765836168488022e-05 ± 5.851404239365365e-06
     Time cost: 399.16705322265625 ± 32.34873962402344
+
+    []
+    Results of testing rook for 16 iterations:
+    Relative error: 0.0031825515907257795 ± 0.012655656784772873
+    Time cost: 160.13975524902344 ± 40.46309280395508
     """
 
 
