@@ -69,7 +69,7 @@ def main():
     N, r = 120, 20
     N, r = 240, 60
 
-    test_ci(N, r, method="full", num_iterations=16)
+    # test_ci(N, r, method="full", num_iterations=16)
     test_ci(N, r, method="rook", num_iterations=16)
 
     """

@@ -10,10 +10,10 @@ import time
 def error_matrix_element(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
-    i: int,
-    j: int,
+    I: torch.Tensor,
+    J: torch.Tensor,
+    i: torch.Tensor,
+    j: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix[i, j] - matrix[i, J] @ pivots_inverse @ matrix[I, j])
 
@@ -21,9 +21,9 @@ def error_matrix_element(
 def error_matrix_row(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
-    i: int,
+    I: torch.Tensor,
+    J: torch.Tensor,
+    i: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix[i, :] - (matrix[i, J] @ pivots_inverse) @ matrix[I, :])
 
@@ -31,9 +31,9 @@ def error_matrix_row(
 def error_matrix_column(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
-    j: int,
+    I: torch.Tensor,
+    J: torch.Tensor,
+    j: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix[:, j] - matrix[:, J] @ (pivots_inverse @ matrix[I, j]))
 
@@ -41,21 +41,20 @@ def error_matrix_column(
 def error_matrix_full(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
+    I: torch.Tensor,
+    J: torch.Tensor,
 ) -> torch.Tensor:
     return torch.abs(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
 
 
 def full_search(
-    matrix: torch.Tensor, pivots_inverse: torch.Tensor, I: List[int], J: List[int]
+    matrix: torch.Tensor, pivots_inverse: torch.Tensor, I: torch.Tensor, J: torch.Tensor
 ) -> Tuple[int, int, float]:
 
     ### This way need the whole matrix fits in memory
     error_full = error_matrix_full(matrix, pivots_inverse, I, J)
     i_star, j_star = torch.unravel_index(torch.argmax(error_full), error_full.size())
-    i_star, j_star = i_star.item(), j_star.item()
-    max_error = error_full[i_star, j_star].item()
+    max_error = error_full[i_star, j_star]
 
     return i_star, j_star, max_error
 
@@ -68,35 +67,35 @@ class RookCondition(Enum):
 def rook_search(
     matrix: torch.Tensor,
     pivots_inverse: torch.Tensor,
-    I: List[int],
-    J: List[int],
+    I: torch.Tensor,
+    J: torch.Tensor,
     max_iteration: int = 4,
 ) -> Tuple[int, int, float]:
 
     # pick the initial pivot
-    i_star = torch.randint(0, matrix.size(0), (1,)).item()
-    j_star = 0
+    i_star = torch.randint(0, matrix.size(0), (), device=matrix.device)
+    j_star = torch.zeros_like(i_star)
     max_error = 0
 
     def rook_row():
         nonlocal i_star, j_star, max_error
         error_row = error_matrix_row(matrix, pivots_inverse, I, J, i_star)
-        next_j = torch.argmax(error_row).item()
+        next_j = torch.argmax(error_row)
 
         moved = next_j != j_star
         j_star = next_j
-        max_error = error_row[j_star].item()
+        max_error = error_row[j_star]
 
         return moved
 
     def rook_column():
         nonlocal i_star, j_star, max_error
         error_column = error_matrix_column(matrix, pivots_inverse, I, J, j_star)
-        next_i = torch.argmax(error_column).item()
+        next_i = torch.argmax(error_column)
 
         moved = next_i != i_star
         i_star = next_i
-        max_error = error_column[i_star].item()
+        max_error = error_column[i_star]
 
         return moved
 
@@ -130,7 +129,7 @@ def rook_search(
 
 def ci(
     matrix: torch.Tensor, method: str = "rook", error_threshold: float = 1e-3
-) -> Tuple[List[int], List[int]]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Performs matrix cross-interpolation on a given 2D tensor.
 
@@ -170,11 +169,12 @@ def ci(
     num_rows = matrix.size(0)
     num_cols = matrix.size(1)
 
-    I: List[int] = []
-    J: List[int] = []
+    I = torch.zeros((0,), dtype=torch.int32, device=matrix.device)
+    J = torch.zeros((0,), dtype=torch.int32, device=matrix.device)
+
     pivots_inverse = torch.inverse(matrix[I, :][:, J])
 
-    while len(I) < num_rows and len(J) < num_cols:
+    while I.numel() < num_rows and J.numel() < num_cols:
         i_star, j_star, error = searcher(matrix, pivots_inverse, I, J)
 
         if error < error_threshold:
@@ -208,7 +208,7 @@ def ci(
 
         pivots_inverse = M_inv
 
-        I.append(i_star)
-        J.append(j_star)
+        I = torch.cat([I, i_star[torch.newaxis, ...]])
+        J = torch.cat([J, j_star[torch.newaxis, ...]])
 
     return I, J, pivots_inverse
