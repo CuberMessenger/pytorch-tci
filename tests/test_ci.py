@@ -5,7 +5,7 @@ from pytorch_tci import ci
 
 
 def prepare_test_matrix(N, r):
-    return torch.rand((N, r)) @ torch.rand((r, N)) # + torch.rand((N, N)) * 1e-2
+    return torch.rand((N, r)) @ torch.rand((r, N))  # + torch.rand((N, N)) * 1e-2
 
 
 def test_ci_single(matrix, method):
@@ -66,12 +66,45 @@ def test_ci(N, r, method, num_iterations):
     print(f"")
 
 
-def main():
-    N, r = 120, 20
-    N, r = 240, 60
+def test_ci_indices():
+    N, r = 120, 4
+    matrix = prepare_test_matrix(N, r).cuda()
 
-    test_ci(N, r, method="full", num_iterations=16)
-    test_ci(N, r, method="rook", num_iterations=16)
+    I, J, pivots_inverse_schur = ci(matrix, method="rook")
+
+    try:
+        pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
+    except Exception as e:
+        print(e)
+        return
+
+    num_pivots = len(I)
+    print(f"Num of pivots: {num_pivots}")
+
+    approximation = matrix[:, J] @ pivots_inverse @ matrix[I, :]
+
+    cell_sum_approximation = 0
+    for i, j in zip(I, J):
+        pivot = matrix[i, j]
+        column = matrix[:, j][..., torch.newaxis]
+        row = matrix[i, :][torch.newaxis, ...]
+
+        cell_sum_approximation += (1 / pivot) * (column @ row)
+
+    print(f"matrix ~ approximation: {torch.norm(matrix - approximation).item()}")
+    print(
+        f"matrix ~ cell_sum_approximation: {torch.norm(matrix - cell_sum_approximation).item()}"
+    )
+
+
+def main():
+    # N, r = 120, 20
+    # N, r = 240, 60
+
+    # test_ci(N, r, method="full", num_iterations=16)
+    # test_ci(N, r, method="rook", num_iterations=16)
+
+    test_ci_indices()
 
     """
     N, r = 240, 60

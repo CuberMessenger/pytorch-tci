@@ -137,4 +137,5 @@ $$
 \end{align*}
 $$
 
-In the above equations, $s$ is actually the Schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.
+- In the above equations, $s$ is actually the Schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.
+- The above equations only hold when $\mathbf{U}$ and $\mathbf{M}$ are both invertible.

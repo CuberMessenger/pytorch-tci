@@ -203,9 +203,24 @@ def ci(
             ]
         )
 
+        # ###
+        # c_res = error_matrix_column(matrix, pivots_inverse, I, J, j_star)[..., torch.newaxis]
+        # r_res = error_matrix_row(matrix, pivots_inverse, I, J, i_star)[torch.newaxis, ...]
+
+        # current_approximation = matrix[:, J] @ pivots_inverse @ matrix[I, :]
+        # try_next_approximation = current_approximation + (1 / s) * (c_res @ r_res)
+        # ###
+
         pivots_inverse = M_inv
 
         I.append(i_star)
         J.append(j_star)
+
+        # ###
+        # true_next_approximation = matrix[:, J] @ pivots_inverse @ matrix[I, :]
+
+        # try_true_difference = torch.norm(true_next_approximation - try_next_approximation)
+        # print(f"Check approximation update: {try_true_difference.item():.3e}")
+        # ###
 
     return I, J, pivots_inverse
