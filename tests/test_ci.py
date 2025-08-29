@@ -11,7 +11,7 @@ def prepare_test_matrix(N, r):
 def test_ci_single(matrix, method):
     torch.cuda.synchronize()
     start_time = time.perf_counter_ns()
-    I, J, pivots_inverse_schur = ci(matrix, method=method)
+    I, J, _ = ci(matrix, method=method)
     torch.cuda.synchronize()
     end_time = time.perf_counter_ns()
 
@@ -19,11 +19,9 @@ def test_ci_single(matrix, method):
 
     try:
         pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
-        inverse_difference = torch.norm(pivots_inverse_schur - pivots_inverse).item()
     except Exception as e:
         print(e)
-        pivots_inverse = pivots_inverse_schur
-        inverse_difference = None
+        return {}
 
     relative_error = (
         torch.norm(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
@@ -35,7 +33,6 @@ def test_ci_single(matrix, method):
         "I": I,
         "J": J,
         "relative_error": relative_error,
-        "inverse_difference": inverse_difference,
         "time_cost": time_cost,
     }
 
@@ -66,49 +63,16 @@ def test_ci(N, r, method, num_iterations):
     print(f"")
 
 
-def test_ci_indices():
-    N, r = 120, 4
-    matrix = prepare_test_matrix(N, r).cuda()
-
-    I, J, pivots_inverse_schur = ci(matrix, method="rook")
-
-    try:
-        pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
-    except Exception as e:
-        print(e)
-        return
-
-    num_pivots = len(I)
-    print(f"Num of pivots: {num_pivots}")
-
-    approximation = matrix[:, J] @ pivots_inverse @ matrix[I, :]
-
-    cell_sum_approximation = 0
-    for i, j in zip(I, J):
-        pivot = matrix[i, j]
-        column = matrix[:, j][..., torch.newaxis]
-        row = matrix[i, :][torch.newaxis, ...]
-
-        cell_sum_approximation += (1 / pivot) * (column @ row)
-
-    print(f"matrix ~ approximation: {torch.norm(matrix - approximation).item()}")
-    print(
-        f"matrix ~ cell_sum_approximation: {torch.norm(matrix - cell_sum_approximation).item()}"
-    )
-
-
 def main():
     # N, r = 120, 20
-    # N, r = 240, 60
+    N, r = 240, 60
 
-    # test_ci(N, r, method="full", num_iterations=16)
+    test_ci(N, r, method="full", num_iterations=16)
     # test_ci(N, r, method="rook", num_iterations=16)
-
-    test_ci_indices()
 
     """
     N, r = 240, 60
-    
+
     Results of testing full for 16 iterations:
     Relative error: 1.6688509276718833e-05 ± 3.640356453615823e-06
     Time cost: 110.21920776367188 ± 5.356021881103516
