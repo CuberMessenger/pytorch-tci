@@ -11,7 +11,7 @@ def prepare_test_matrix(N, r):
 def test_ci_single(matrix, method):
     torch.cuda.synchronize()
     start_time = time.perf_counter_ns()
-    I, J, _ = ci(matrix, method=method)
+    I, J, _ = ci(matrix, method=method, error_threshold=1e-2)
     torch.cuda.synchronize()
     end_time = time.perf_counter_ns()
 
@@ -64,10 +64,13 @@ def test_ci(N, r, method, num_iterations):
 
 
 def main():
-    # N, r = 120, 20
-    N, r = 240, 60
+    N, r = 30, 10
+    test_ci(N, r, method="rook", num_iterations=1)
+    # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
 
-    test_ci(N, r, method="full", num_iterations=16)
+    # N, r = 240, 60
+
+    # test_ci(N, r, method="full", num_iterations=16)
     # test_ci(N, r, method="rook", num_iterations=16)
 
     """

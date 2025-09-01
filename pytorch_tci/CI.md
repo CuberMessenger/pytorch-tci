@@ -226,3 +226,34 @@ With the above equation, one can establish the following algorithm:
     - $\mathcal{D}_{t - 1} = \frac{1}{\mathcal{E}_{t - 1}(i^*, j^*)} \mathcal{E}_{t - 1}(:, j^*) \mathcal{E}_{t - 1}(i^*, :)$;
     - $\mathbf{\tilde{A}}_{t} = \mathbf{\tilde{A}}_{t - 1} + \mathcal{D}_{t - 1}$;
     - $\mathcal{E}_{t} = \mathcal{E}_{t - 1} - \mathcal{D}_{t - 1}$.
+
+### Efficient ACA
+
+In some scenarios, one should assume that the original matrix $\mathbf{A}$ is too large to fit in memory and expensive to evaluate. In such cases, one should follows a more memory-efficient implementation.
+
+Let
+
+$$
+\begin{aligned}
+    p_t &= \mathcal{E}_{t}(I_k, J_k), \\
+    \mathbf{c}_t &= \mathcal{E}_{t}(:, J_k), \\
+    \mathbf{r}_t &= \mathcal{E}_{t}(I_k, :),
+\end{aligned}
+$$
+
+then one has
+
+$$
+\begin{aligned}
+    \mathcal{E}_{t} &= \mathbf{A} - \mathbf{\tilde{A}}_{t} = \mathbf{A} - \sum_{k = 0}^{t - 1} \frac{1}{p_{k}} \mathbf{c}_{k} \mathbf{r}_{k}, \\
+    \mathcal{E}_{t}(:, j) &= \mathbf{A}(:, j) - \mathbf{\tilde{A}}_{t}(:, j) = \mathbf{A}(:, j) - \sum_{k = 0}^{t - 1} \frac{1}{p_{k}} \mathbf{c}_{k} \mathbf{r}_{k}(j), \\
+    \mathcal{E}_{t}(i, :) &= \mathbf{A}(i, :) - \mathbf{\tilde{A}}_{t}(i, :) = \mathbf{A}(i, :) - \sum_{k = 0}^{t - 1} \frac{1}{p_{k}} \mathbf{c}_{k}(i) \mathbf{r}_{k}.
+\end{aligned}
+$$
+
+Therefore, one can follows
+
+1. Find a new pivot $(i^*, j^*)$.
+2. Find new vectors:
+    - $\mathbf{c}_{t} = \mathcal{E}_{t}(:, j^*)$;
+    - $\mathbf{r}_{t} = \mathcal{E}_{t}(i^*, :)$.
