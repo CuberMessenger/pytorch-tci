@@ -8,7 +8,7 @@ This repository implements **Tensor Cross Interpolation** algorithm upon the **P
 
 
 # TODO list
-- [ ] Implement the **Cross Interpolation** algorithm without memory limit.
+- [x] Implement the **Cross Interpolation** algorithm without memory limit.
 - [ ] Implement the **Tensor Cross Interpolation** algorithm without memory limit.
 - [ ] Implement the **Cross Interpolation** algorithm with memory limit.
 - [ ] Implement the **Tensor Cross Interpolation** algorithm with memory limit.
