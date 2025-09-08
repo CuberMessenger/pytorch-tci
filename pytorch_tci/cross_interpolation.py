@@ -53,10 +53,7 @@ def query_error_full(
     cs: torch.Tensor,  # [t, m]
     rs: torch.Tensor,  # [t, n]
 ) -> torch.Tensor:
-    return matrix - (
-        torch.bmm(cs[:, :, torch.newaxis], rs[:, torch.newaxis, :])
-        / ps[:, :, torch.newaxis]
-    ).sum(dim=0)
+    return matrix - (cs / ps).T @ rs
 
 
 def full_search(
@@ -71,8 +68,10 @@ def full_search(
     i_star, j_star = i_star.item(), j_star.item()
 
     p = error_full[i_star, j_star]
-    c = error_full[:, j_star]
-    r = error_full[i_star, :]
+    c = error_full[:, j_star].clone()
+    r = error_full[i_star, :].clone()
+
+    del error_full
 
     return i_star, j_star, p, c, r
 
@@ -87,14 +86,11 @@ def rook_search(
     ps: torch.Tensor,
     cs: torch.Tensor,
     rs: torch.Tensor,
-    I: List[int] = [],
     max_iteration: int = 4,
 ) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     # pick the initial pivot
     i_star = torch.randint(0, matrix.size(0), (1,)).item()
-    while i_star in I:
-        i_star = torch.randint(0, matrix.size(0), (1,)).item()
     j_star = 0
     p = None
     c = None
@@ -147,12 +143,16 @@ def rook_search(
 
             continue
 
+    r = query_error_row(matrix, ps, cs, rs, i_star)
+    c = query_error_column(matrix, ps, cs, rs, j_star)
+    p = query_error_element(matrix, ps, cs, rs, i_star, j_star)
+
     return i_star, j_star, p, c, r
 
 
 def ci(
     matrix: torch.Tensor, method: str = "rook", error_threshold: float = 1e-3
-) -> Tuple[List[int], List[int]]:
+) -> List[Tuple[int, int]]:
     """
     Performs matrix cross-interpolation on a given 2D tensor.
 
@@ -192,8 +192,7 @@ def ci(
     num_rows = matrix.size(0)
     num_columns = matrix.size(1)
 
-    I: List[int] = []
-    J: List[int] = []
+    IJ = []
 
     ps = torch.empty((0, 1), device=matrix.device, dtype=matrix.dtype)  # [t, 1]
     cs = torch.empty((0, num_rows), device=matrix.device, dtype=matrix.dtype)  # [t, m]
@@ -201,17 +200,42 @@ def ci(
         (0, num_columns), device=matrix.device, dtype=matrix.dtype
     )  # [t, n]
 
-    while len(I) < num_rows and len(J) < num_columns:
-        i_star, j_star, p, c, r = searcher(matrix, ps, cs, rs, I=I)
+    while len(IJ) < num_rows and len(IJ) < num_columns:
+        with torch.no_grad():
+            i_star, j_star, p, c, r = searcher(matrix, ps, cs, rs)
 
         if p.abs() < error_threshold:
             break
 
-        I.append(i_star)
-        J.append(j_star)
+        if (i_star, j_star) in IJ:
+            print(f"found repeated pivot ({i_star}, {j_star}) ......")
+            continue
+
+        IJ.append((i_star, j_star))
 
         ps = torch.cat((ps, p[torch.newaxis, torch.newaxis]), dim=0)  # [t+1, 1]
         cs = torch.cat((cs, c[torch.newaxis, :]), dim=0)  # [t+1, m]
         rs = torch.cat((rs, r[torch.newaxis, :]), dim=0)  # [t+1, n]
 
+    I = [i for i, _ in IJ]
+    J = [j for _, j in IJ]
+
     return I, J, None
+
+
+if __name__ == "__main__":
+    N, r = 600, 200
+    matrix = (torch.randn(N, r) @ torch.randn(r, N)).cuda()
+
+    I, J, _ = ci(matrix, method="full", error_threshold=1e-3)
+    print(f"Selected rows: {I}")
+    print(f"Selected cols: {J}")
+
+    pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
+
+    relative_error = (
+        torch.norm(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
+        / torch.norm(matrix)
+    ).item()
+
+    print(f"Relative error: {relative_error}")
