@@ -1,7 +1,7 @@
 import tqdm
 import time
 import torch
-from pytorch_tci import ci
+from pytorch_tci import cross_interpolation
 
 
 def prepare_test_matrix(N, r):
@@ -18,7 +18,7 @@ def test_ci_single(matrix, method):
     torch.cuda.synchronize()
     start_time = time.perf_counter_ns()
 
-    I, J, _ = ci(matrix, method=method, error_threshold=1e-2)
+    I, J, _ = cross_interpolation(matrix=matrix, method=method, error_threshold=1e-2)
 
     torch.cuda.synchronize()
     end_time = time.perf_counter_ns()
@@ -84,7 +84,7 @@ def main():
     # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
 
     # N, r = 240, 60
-    N, r = 15000, 200
+    N, r = 6000, 500
 
     test_ci(N, r, method="full", num_iterations=4)
     test_ci(N, r, method="rook", num_iterations=4)

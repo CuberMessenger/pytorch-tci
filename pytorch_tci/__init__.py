@@ -1,3 +1,3 @@
-from .cross_interpolation import ci
+from .cross_interpolation import cross_interpolation
 
-__all__ = ["ci"]
+__all__ = ["cross_interpolation"]
