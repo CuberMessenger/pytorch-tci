@@ -84,7 +84,7 @@ def main():
     # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
 
     # N, r = 240, 60
-    N, r = 6000, 500
+    N, r = 8000, 400
 
     test_ci(N, r, method="full", num_iterations=4)
     test_ci(N, r, method="rook", num_iterations=4)
