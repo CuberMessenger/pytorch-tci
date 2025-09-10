@@ -13,14 +13,16 @@ where $\mathbb{I} = \{1, 2, ..., m\}$ and $\mathbb{J} = \{1, 2, ..., n\}$, while
 ## Main properties
 
 - **Interpolation**
+
 $$
-\begin{align*}
+\begin{aligned}
     \mathbf{A}(\mathbb{I}, J) &= \mathbf{\tilde{A}}(\mathbb{I}, J), \\
     \mathbf{A}(I, \mathbb{J}) &= \mathbf{\tilde{A}}(I, \mathbb{J}). \\
-\end{align*}
+\end{aligned}
 $$
 
 - **Low-rank decomposition**
+
 $$
 \mathbf{A} = \mathbf{\tilde{A}} \quad \text{if} \quad \text{rank}(\mathbf{A}) \leq r.
 $$
@@ -28,13 +30,15 @@ $$
 ## Algorithm
 
 First, define an error function (matrix) as:
+
 $$
-\begin{align*}
+\begin{aligned}
     \mathcal{E}(i, j) &= \text{abs}(\mathbf{A} - \mathbf{\tilde{A}})(i, j) \\
     &= \text{abs}(\mathbf{A}(i, j) - \mathbf{\tilde{A}}(i, j)) \\
     &= \text{abs}(\mathbf{A}(i, j) - \mathbf{A}(i, J) \mathbf{A}(I, J)^{-1} \mathbf{A}(I, j)) \\
-\end{align*}
+\end{aligned}
 $$
+
 where $i \in \mathbb{I} \setminus I$ and $j \in \mathbb{J} \setminus J$.
 
 ### Full Search
@@ -47,14 +51,19 @@ Then the algorithm goes as follows:
 $$
 (i^*, j^*) = \argmax_{i \in \mathbb{I}, j \in \mathbb{J}} \mathcal{E}(i, j).
 $$
+
 2. Add the point $(i^*, j^*)$ to the sets $I$ and $J$:
+
 $$
 I \leftarrow I \cup \{i^*\}, \quad J \leftarrow J \cup \{j^*\}.
 $$
+
 3. Repeat steps 1 and 2 until the interpolation error satisfies a predefined threshold:
+
 $$
 \|\mathbf{\mathcal{E}}\|_{\xi} < \epsilon,
 $$
+
 where $\|\cdot\|_{\xi}$ is a norm (e.g., Frobenius norm) and $\epsilon$ is a predefined threshold.
 
 ### Rook Search
@@ -76,18 +85,20 @@ $$
 4. Repeat steps 2 and 3 until the limit of iterations is reached or the following condition (rook condition) is met:
 
 $$
-\begin{align*}
+\begin{aligned}
     i^* &= \argmax_{i \in \mathbb{I}} \mathcal{E}(i, j^*), \\
     j^* &= \argmax_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
-\end{align*}
+\end{aligned}
 $$
 
 5. Add the point $(i^*, j^*)$ to the sets $I$ and $J$:
+
 $$
 I \leftarrow I \cup \{i^*\}, \quad J \leftarrow J \cup \{j^*\}.
 $$
 
 6. Repeat steps 1 to 5 until the interpolation error satisfies a predefined threshold:
+
 $$
 \|\mathbf{\mathcal{E}}\|_{\xi} < \epsilon.
 $$
@@ -108,17 +119,17 @@ $$
 where
 
 $$
-\begin{align*}
+\begin{aligned}
     \mathbf{c} &\in \mathbb{R}^{k \times 1}, \\
     \mathbf{r} &\in \mathbb{R}^{1 \times k}, \\
     p &\in \mathbb{R}.
-\end{align*}
+\end{aligned}
 $$
 
 Then the inverse of $\mathbf{M}$ can be computed as
 
 $$
-\begin{align*}
+\begin{aligned}
     \mathbf{M}^{-1} &= \begin{bmatrix}
         \mathbf{U}^{-1} + \mathbf{U}^{-1} \mathbf{c} s^{-1} \mathbf{r} \mathbf{U}^{-1} & -\mathbf{U}^{-1} \mathbf{c} s^{-1} \\
         -s^{-1} \mathbf{r} \mathbf{U}^{-1} & s^{-1}
@@ -127,17 +138,17 @@ $$
         \mathbf{U}^{-1} + \mathbf{l} s^{-1} \mathbf{h} & -\mathbf{l} s^{-1} \\
         -s^{-1} \mathbf{h} & s^{-1}
     \end{bmatrix}
-\end{align*}
+\end{aligned}
 $$
 
 where
 
 $$
-\begin{align*}
+\begin{aligned}
     \mathbf{l} &= \mathbf{U}^{-1} \mathbf{c} \in \mathbb{R}^{k \times 1}, \\
     \mathbf{h} &= \mathbf{r} \mathbf{U}^{-1} \in \mathbb{R}^{1 \times k}, \\
     s &= p - \mathbf{r} \mathbf{U}^{-1} \mathbf{c} \in \mathbb{R}.
-\end{align*}
+\end{aligned}
 $$
 
 - In the above equations, $s$ is actually the Schur complement of $\mathbf{U}$ in $\mathbf{M}$, and the matrix $\mathbf{M}$ is singular when $s = 0$.

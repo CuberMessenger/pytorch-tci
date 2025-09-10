@@ -64,17 +64,19 @@ def test_ci(N, r, method, num_iterations):
         result = test_ci_single(matrix, method)
         results.append(result)
 
+    num_pivots = torch.Tensor([len(r["I"]) for r in results])
     relative_errors = torch.Tensor([r["relative_error"] for r in results])
     time_costs = torch.Tensor([r["time_cost"] for r in results])
     memory_costs = torch.Tensor([r["memory_cost"] for r in results])
 
     print(f"Results of testing {method} for {num_iterations} iterations:")
+    print(f"Number of pivots:\t{num_pivots.mean().item()} ± {num_pivots.std().item()}")
     print(
-        f"Relative error (%):\t{relative_errors.mean().item() * 100} ± {relative_errors.std().item() * 100}"
+        f"Relative error (%):\t{relative_errors.mean().item() * 100:.2f} ± {relative_errors.std().item() * 100:.2f}"
     )
-    print(f"Time cost (ms):\t\t{time_costs.mean().item()} ± {time_costs.std().item()}")
+    print(f"Time cost (ms):\t\t{time_costs.mean().item():.2f} ± {time_costs.std().item():.2f}")
     print(
-        f"Memory cost (MB):\t{memory_costs.mean().item()} ± {memory_costs.std().item()}"
+        f"Memory cost (MB):\t{memory_costs.mean().item():.2f} ± {memory_costs.std().item():.2f}"
     )
 
 
@@ -84,7 +86,9 @@ def main():
     # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
 
     # N, r = 240, 60
-    N, r = 8000, 400
+    N, r = 1000, 800
+    # N, r = 4000, 500
+    # N, r = 8000, 400
 
     test_ci(N, r, method="full", num_iterations=4)
     test_ci(N, r, method="rook", num_iterations=4)

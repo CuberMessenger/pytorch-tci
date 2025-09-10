@@ -228,6 +228,8 @@ def cross_interpolation(
     rs = torch.empty((0, num_columns), device=device, dtype=dtype)  # [t, n]
 
     IJ = []
+    relative_errors = []
+    num_singulars = []
     while len(IJ) < min(num_rows, num_columns):
         with torch.no_grad():
             i_star, j_star, p, c, r = searcher(ps, cs, rs)
@@ -245,25 +247,53 @@ def cross_interpolation(
         cs = torch.cat((cs, c[torch.newaxis, :]), dim=0)  # [t+1, m]
         rs = torch.cat((rs, r[torch.newaxis, :]), dim=0)  # [t+1, n]
 
+        ### DEBUG ###
+        I = [i for i, _ in IJ]
+        J = [j for _, j in IJ]
+        matrix = query_matrix()
+        relative_error = (
+            matrix - matrix[:, J] @ torch.linalg.inv(matrix[I, :][:, J]) @ matrix[I, :]
+        ).norm() / matrix.norm()
+        relative_errors.append(relative_error.item())
+
+        num_singular = torch.linalg.matrix_rank(
+            query_error_full(query_matrix, ps, cs, rs), atol=error_threshold
+        )
+        num_singulars.append(num_singular.item())
+        print(f"RE: {relative_error * 100:.2f}%, #SV: {num_singular}, pivots: {len(IJ)}")
+        ### DEBUG ###
+
     I = [i for i, _ in IJ]
     J = [j for _, j in IJ]
 
-    return I, J, None
+    return I, J, (relative_errors, num_singulars)
 
 
 if __name__ == "__main__":
-    N, r = 600, 200
+    N, r = 500, 300
     matrix = (torch.randn(N, r) @ torch.randn(r, N)).cuda()
 
-    I, J, _ = cross_interpolation(matrix=matrix, method="rook", error_threshold=1e-3)
-    print(f"Selected rows: {I}")
-    print(f"Selected cols: {J}")
+    I, J, (relative_errors, num_singulars) = cross_interpolation(
+        matrix=matrix, method="rook", error_threshold=1e-3
+    )
 
-    pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
+    import matplotlib.pyplot as plot
 
-    relative_error = (
-        torch.norm(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
-        / torch.norm(matrix)
-    ).item()
+    figure, axis = plot.subplots(1, 2, dpi=200, figsize=(12, 6))
 
-    print(f"Relative error: {relative_error}")
+    x = torch.arange(1, len(relative_errors) + 1)
+    y = torch.tensor(relative_errors) * 100
+
+    axis[0].plot(x, y, marker="o")
+    axis[0].set_xlabel("Iteration", fontsize=12)
+    axis[0].set_ylabel("Relative Error (%)", fontsize=12)
+    axis[0].set_title(f"Relative Error with N={N}, r={r}", fontsize=12)
+
+    x = torch.arange(1, len(num_singulars) + 1)
+    y = torch.tensor(num_singulars)
+    axis[1].plot(x, y, marker="o", color="orange")
+    axis[1].set_xlabel("Iteration", fontsize=12)
+    axis[1].set_ylabel("# Singular Values", fontsize=12)
+    axis[1].set_title(f"# Singular Values in E with N={N}, r={r}", fontsize=12)
+
+    plot.show()
