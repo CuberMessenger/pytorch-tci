@@ -4,6 +4,42 @@ from typing import List, Tuple, Optional, Callable
 from enum import Enum, auto
 
 
+def query_interpolation_element(
+    ps: torch.Tensor,  # [t, 1]
+    cs: torch.Tensor,  # [t, m]
+    rs: torch.Tensor,  # [t, n]
+    i: int,
+    j: int,
+) -> torch.Tensor:
+    return ((cs[:, [i]] * rs[:, [j]]) / ps).sum()
+
+
+def query_interpolation_column(
+    ps: torch.Tensor,  # [t, 1]
+    cs: torch.Tensor,  # [t, m]
+    rs: torch.Tensor,  # [t, n]
+    j: int,
+) -> torch.Tensor:
+    return ((cs * rs[:, [j]]) / ps).sum(dim=0)
+
+
+def query_interpolation_row(
+    ps: torch.Tensor,  # [t, 1]
+    cs: torch.Tensor,  # [t, m]
+    rs: torch.Tensor,  # [t, n]
+    i: int,
+) -> torch.Tensor:
+    return ((cs[:, [i]] * rs) / ps).sum(dim=0)
+
+
+def query_interpolation_full(
+    ps: torch.Tensor,  # [t, 1]
+    cs: torch.Tensor,  # [t, m]
+    rs: torch.Tensor,  # [t, n]
+) -> torch.Tensor:
+    return (cs / ps).T @ rs
+
+
 def query_error_element(
     query_matrix_element: Callable[[int, int], torch.Tensor],
     ps: torch.Tensor,  # [t, 1]
@@ -12,17 +48,7 @@ def query_error_element(
     i: int,
     j: int,
 ) -> torch.Tensor:
-    return query_matrix_element(i, j) - ((cs[:, [i]] * rs[:, [j]]) / ps).sum()
-
-
-def query_error_row(
-    query_matrix_row: Callable[[int], torch.Tensor],
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
-    i: int,
-) -> torch.Tensor:
-    return query_matrix_row(i) - ((cs[:, [i]] * rs) / ps).sum(dim=0)
+    return query_matrix_element(i, j) - query_interpolation_element(ps, cs, rs, i, j)
 
 
 def query_error_column(
@@ -32,7 +58,17 @@ def query_error_column(
     rs: torch.Tensor,  # [t, n]
     j: int,
 ) -> torch.Tensor:
-    return query_matrix_column(j) - ((cs * rs[:, [j]]) / ps).sum(dim=0)
+    return query_matrix_column(j) - query_interpolation_column(ps, cs, rs, j)
+
+
+def query_error_row(
+    query_matrix_row: Callable[[int], torch.Tensor],
+    ps: torch.Tensor,  # [t, 1]
+    cs: torch.Tensor,  # [t, m]
+    rs: torch.Tensor,  # [t, n]
+    i: int,
+) -> torch.Tensor:
+    return query_matrix_row(i) - query_interpolation_row(ps, cs, rs, i)
 
 
 def query_error_full(
@@ -41,7 +77,7 @@ def query_error_full(
     cs: torch.Tensor,  # [t, m]
     rs: torch.Tensor,  # [t, n]
 ) -> torch.Tensor:
-    return query_matrix() - (cs / ps).T @ rs
+    return query_matrix() - query_interpolation_full(ps, cs, rs)
 
 
 def full_search(
@@ -76,7 +112,6 @@ def rook_search(
     query_matrix_element: Callable[[int, int], torch.Tensor],
     query_matrix_row: Callable[[int], torch.Tensor],
     query_matrix_column: Callable[[int], torch.Tensor],
-    num_rows: int,
     ps: torch.Tensor,
     cs: torch.Tensor,
     rs: torch.Tensor,
@@ -84,7 +119,7 @@ def rook_search(
 ) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     # pick the initial pivot
-    i_star = torch.randint(0, num_rows, (1,)).item()
+    i_star = torch.randint(0, cs.size(1), (1,)).item()
     j_star = 0
     p = None
     c = None
@@ -154,13 +189,22 @@ def cross_interpolation(
     matrix: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
-) -> List[Tuple[int, int]]:
+) -> Tuple[
+    List[int],
+    List[int],
+    Tuple[
+        Callable[[int, int], torch.Tensor],
+        Callable[[int], torch.Tensor],
+        Callable[[int], torch.Tensor],
+        Callable[[], torch.Tensor],
+    ],
+]:
     """
-    Performs matrix cross-interpolation on a given 2D tensor.
+    Performs matrix cross-interpolation on a given 2D torch.Tensor.
 
-    This function implements a greedy pivot searching algorithm (full/rook) to find the optimal sets of row and column indices (I and J) for cross-interpolation, such that the approximation of the matrix based on these indices meets a specified error threshold.
+    This function implements a greedy pivot searching algorithm (full/rook) to find the optimal sets of row and column indices (I and J) for cross-interpolation, such that the interpolation of the matrix based on these indices meets a specified error threshold.
 
-    The approximation `A_tilde` is calculated as: A_tilde = A[:, J] @ inv(A[I, J]) @ A[I, :]
+    The interpolation `A_tilde` is calculated as A_tilde = A[:, J] @ inv(A[I, J]) @ A[I, :]. However, the function does not return the interpolation directly. Instead, it returns the interface for computing the reconstruction. Namely, wrapper functions integrated with ps: [t, 1], cs: [t, m], rs: [t, n], where t = len(I) = len(J).
 
     Arguments:
         query_matrix_element: A callable that takes two integers (i, j) and returns the element at position (i, j) of the matrix.
@@ -176,9 +220,17 @@ def cross_interpolation(
         error_threshold: The desired precision. The algorithm stops when the new pivot's error is below this threshold.
 
     Returns:
-        Tuple[List[int], List[int]]: A tuple containing two lists of integers:
-            - The list of selected row indices (I).
-            - The list of selected column indices (J).
+        Tuple[List[int], List[int], Tuple[
+            Callable[[int, int], torch.Tensor],
+            Callable[[int], torch.Tensor],
+            Callable[[int], torch.Tensor],
+            Callable[[], torch.Tensor],
+        ]]:
+        A tuple containing:
+            - I: A list of selected row indices.
+            - J: A list of selected column indices.
+            - (query_interpolation_element, query_interpolation_row, query_interpolation_column, query_interpolation_full):
+              A tuple of callables for computing the interpolation based on the selected indices.
     """
     if matrix is not None:
         assert matrix.dim() == 2, "Input matrix must be a 2D tensor."
@@ -210,7 +262,6 @@ def cross_interpolation(
                 query_matrix_element,
                 query_matrix_row,
                 query_matrix_column,
-                num_rows,
                 p,
                 c,
                 r,
@@ -227,73 +278,64 @@ def cross_interpolation(
     cs = torch.empty((0, num_rows), device=device, dtype=dtype)  # [t, m]
     rs = torch.empty((0, num_columns), device=device, dtype=dtype)  # [t, n]
 
-    IJ = []
-    relative_errors = []
-    num_singulars = []
-    while len(IJ) < min(num_rows, num_columns):
+    I: List[int] = []
+    J: List[int] = []
+    pivots = set()
+
+    while len(pivots) < min(num_rows, num_columns):
         with torch.no_grad():
             i_star, j_star, p, c, r = searcher(ps, cs, rs)
 
         if p.abs() < error_threshold:
             break
 
-        if (i_star, j_star) in IJ:
+        if (i_star, j_star) in pivots:
             print(f"found repeated pivot ({i_star}, {j_star}) ......")
             continue
 
-        IJ.append((i_star, j_star))
+        I.append(i_star)
+        J.append(j_star)
+        pivots.add((i_star, j_star))
 
         ps = torch.cat((ps, p[torch.newaxis, torch.newaxis]), dim=0)  # [t+1, 1]
         cs = torch.cat((cs, c[torch.newaxis, :]), dim=0)  # [t+1, m]
         rs = torch.cat((rs, r[torch.newaxis, :]), dim=0)  # [t+1, n]
 
-        ### DEBUG ###
-        I = [i for i, _ in IJ]
-        J = [j for _, j in IJ]
-        matrix = query_matrix()
-        relative_error = (
-            matrix - matrix[:, J] @ torch.linalg.inv(matrix[I, :][:, J]) @ matrix[I, :]
-        ).norm() / matrix.norm()
-        relative_errors.append(relative_error.item())
-
-        num_singular = torch.linalg.matrix_rank(
-            query_error_full(query_matrix, ps, cs, rs), atol=error_threshold
-        )
-        num_singulars.append(num_singular.item())
-        print(f"RE: {relative_error * 100:.2f}%, #SV: {num_singular}, pivots: {len(IJ)}")
-        ### DEBUG ###
-
-    I = [i for i, _ in IJ]
-    J = [j for _, j in IJ]
-
-    return I, J, (relative_errors, num_singulars)
+    return (
+        I,
+        J,
+        (
+            lambda i, j: query_interpolation_element(ps, cs, rs, i, j),
+            lambda i: query_interpolation_row(ps, cs, rs, i),
+            lambda j: query_interpolation_column(ps, cs, rs, j),
+            lambda: query_interpolation_full(ps, cs, rs),
+        ),
+    )
 
 
 if __name__ == "__main__":
-    N, r = 500, 300
-    matrix = (torch.randn(N, r) @ torch.randn(r, N)).cuda()
+    M, r, N = 500, 80, 300
+    matrix = (torch.randn(M, r) @ torch.randn(r, N)).cuda()
 
-    I, J, (relative_errors, num_singulars) = cross_interpolation(
-        matrix=matrix, method="rook", error_threshold=1e-3
-    )
+    I, J, _ = cross_interpolation(matrix=matrix, method="rook", error_threshold=1e-3)
 
-    import matplotlib.pyplot as plot
+    # import matplotlib.pyplot as plot
 
-    figure, axis = plot.subplots(1, 2, dpi=200, figsize=(12, 6))
+    # figure, axis = plot.subplots(1, 2, dpi=200, figsize=(12, 6))
 
-    x = torch.arange(1, len(relative_errors) + 1)
-    y = torch.tensor(relative_errors) * 100
+    # x = torch.arange(1, len(relative_errors) + 1)
+    # y = torch.tensor(relative_errors) * 100
 
-    axis[0].plot(x, y, marker="o")
-    axis[0].set_xlabel("Iteration", fontsize=12)
-    axis[0].set_ylabel("Relative Error (%)", fontsize=12)
-    axis[0].set_title(f"Relative Error with N={N}, r={r}", fontsize=12)
+    # axis[0].plot(x, y, marker="o")
+    # axis[0].set_xlabel("Iteration", fontsize=12)
+    # axis[0].set_ylabel("Relative Error (%)", fontsize=12)
+    # axis[0].set_title(f"Relative Error with N={N}, r={r}", fontsize=12)
 
-    x = torch.arange(1, len(num_singulars) + 1)
-    y = torch.tensor(num_singulars)
-    axis[1].plot(x, y, marker="o", color="orange")
-    axis[1].set_xlabel("Iteration", fontsize=12)
-    axis[1].set_ylabel("# Singular Values", fontsize=12)
-    axis[1].set_title(f"# Singular Values in E with N={N}, r={r}", fontsize=12)
+    # x = torch.arange(1, len(num_singulars) + 1)
+    # y = torch.tensor(num_singulars)
+    # axis[1].plot(x, y, marker="o", color="orange")
+    # axis[1].set_xlabel("Iteration", fontsize=12)
+    # axis[1].set_ylabel("# Singular Values", fontsize=12)
+    # axis[1].set_title(f"# Singular Values in E with N={N}, r={r}", fontsize=12)
 
-    plot.show()
+    # plot.show()

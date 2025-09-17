@@ -4,6 +4,10 @@ import torch
 from pytorch_tci import cross_interpolation
 
 
+def compute_relative_error(A, A_tilde):
+    return (torch.norm(A - A_tilde) / torch.norm(A)).item()
+
+
 def prepare_test_matrix(N, r):
     return torch.rand((N, r)) @ torch.rand((r, N))  # + torch.rand((N, N)) * 1e-2
 
@@ -18,7 +22,9 @@ def test_ci_single(matrix, method):
     torch.cuda.synchronize()
     start_time = time.perf_counter_ns()
 
-    I, J, _ = cross_interpolation(matrix=matrix, method=method, error_threshold=1e-2)
+    I, J, (_, _, _, query_interpolation_matrix) = cross_interpolation(
+        matrix=matrix, method=method, error_threshold=1e-2
+    )
 
     torch.cuda.synchronize()
     end_time = time.perf_counter_ns()
@@ -30,19 +36,20 @@ def test_ci_single(matrix, method):
 
     try:
         pivots_inverse = torch.linalg.inv(matrix[I, :][:, J])
+        inv_relative_error = compute_relative_error(
+            matrix, matrix[:, J] @ pivots_inverse @ matrix[I, :]
+        )
     except Exception as e:
         print(e)
-        return {}
+        inv_relative_error = float("inf")
 
-    relative_error = (
-        torch.norm(matrix - matrix[:, J] @ pivots_inverse @ matrix[I, :])
-        / torch.norm(matrix)
-    ).item()
+    relative_error = compute_relative_error(matrix, query_interpolation_matrix())
 
     result = {
         "num_pivots": len(I),
         "I": I,
         "J": J,
+        "inv_relative_error": inv_relative_error,
         "relative_error": relative_error,
         "time_cost": time_cost,
         "memory_cost": (peak_allocated - start_allocated) / 1e6,
@@ -65,6 +72,7 @@ def test_ci(N, r, method, num_iterations):
         results.append(result)
 
     num_pivots = torch.Tensor([len(r["I"]) for r in results])
+    inv_relative_errors = torch.Tensor([r["inv_relative_error"] for r in results])
     relative_errors = torch.Tensor([r["relative_error"] for r in results])
     time_costs = torch.Tensor([r["time_cost"] for r in results])
     memory_costs = torch.Tensor([r["memory_cost"] for r in results])
@@ -72,9 +80,14 @@ def test_ci(N, r, method, num_iterations):
     print(f"Results of testing {method} for {num_iterations} iterations:")
     print(f"Number of pivots:\t{num_pivots.mean().item()} ± {num_pivots.std().item()}")
     print(
+        f"Inverse relative error (%):\t{inv_relative_errors.mean().item() * 100:.2f} ± {inv_relative_errors.std().item() * 100:.2f}"
+    )
+    print(
         f"Relative error (%):\t{relative_errors.mean().item() * 100:.2f} ± {relative_errors.std().item() * 100:.2f}"
     )
-    print(f"Time cost (ms):\t\t{time_costs.mean().item():.2f} ± {time_costs.std().item():.2f}")
+    print(
+        f"Time cost (ms):\t\t{time_costs.mean().item():.2f} ± {time_costs.std().item():.2f}"
+    )
     print(
         f"Memory cost (MB):\t{memory_costs.mean().item():.2f} ± {memory_costs.std().item():.2f}"
     )
@@ -85,8 +98,8 @@ def main():
     # test_ci(N, r, method="rook", num_iterations=1)
     # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
 
-    # N, r = 240, 60
-    N, r = 1000, 800
+    N, r = 240, 60
+    # N, r = 1000, 800
     # N, r = 4000, 500
     # N, r = 8000, 400
 
