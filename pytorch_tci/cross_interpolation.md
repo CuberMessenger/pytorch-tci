@@ -1,6 +1,6 @@
 # Cross interpolation
 
-**Goal** - Given a matrix $\mathbf{A} \in \mathbb{R}^{m \times n}$ build an low-rank interpolation $\mathbf{\tilde{A}} \in \mathbb{R}^{m \times n}$ using a small set of rows $\mathbb{I} \subseteq \{1, \ldots, m\}$ and columns $\mathbb{J} \subseteq \{1, \ldots, n\}$ chosen greedily.
+**Goal** - Given a matrix $\mathbf{A} \in \mathbb{R}^{m \times n}$ build an low-rank interpolation $\mathbf{\tilde{A}} \in \mathbb{R}^{m \times n}$ using a small set of rows and columns chosen greedily.
 
 ## Notations
 
