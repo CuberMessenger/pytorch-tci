@@ -48,7 +48,7 @@ $$
 First, define an error matrix as
 
 $$
-\mathcal{E}(i, j) = \text{abs}(\mathbf{A} - \mathbf{\tilde{A}})(i, j).
+\mathcal{E}(i, j) = (\mathbf{A} - \mathbf{\tilde{A}})(i, j).
 $$
 
 Then, the algorithm goes as follows:
@@ -59,7 +59,7 @@ Then, the algorithm goes as follows:
 
 3. Add the point $(i^*, j^*)$ to the sets $I$ and $J$.
 
-4. Repeat steps 2-3 until the error is below a certain threshold or the maximum rank is reached.
+4. Repeat steps 2 and 3 until $|\mathcal{E}(i^*, j^*)| \leq \epsilon$ or the maximum rank is reached.
 
 At **step 2**, there are two strategies to find the pivot, namely **full search** and **rook search**.
 
@@ -185,7 +185,7 @@ $$
 \end{aligned}
 $$
 
-where $s = p - \mathbf{r}^{(t)} \mathbf{Q}^{(t - 1)} \mathbf{c}^{(t)}$.
+where $s = p^{(t)} - \mathbf{r}^{(t)} \mathbf{Q}^{(t - 1)} \mathbf{c}^{(t)}$.
 
 Further, expand the expression of $\mathbf{\tilde{A}}^{(t)}$ as follows:
 
@@ -229,15 +229,82 @@ $$
     &\quad + s^{-1} \mathbf{A}(\mathbb{I}, j_t) \mathbf{A}(i_t, \mathbb{J}) \\
 
     &= \mathbf{\tilde{A}}^{(t - 1)} \\
-    &\quad + s^{-1} \mathbf{\tilde{A}}(\mathbb{I}, j_t)^{(t - 1)} \mathbf{\tilde{A}}(i_t, \mathbb{J})^{(t - 1)} \\
-    &\quad - s^{-1} \mathbf{A}(\mathbb{I}, j_t) \mathbf{\tilde{A}}(\mathbb{I}, j_t)^{(t - 1)}  \\
-    &\quad - s^{-1} \mathbf{A}(\mathbb{I}, J^{(t - 1)}) \mathbf{\tilde{A}}(i_t, \mathbb{J})^{(t - 1)} \\
+    &\quad + s^{-1} \mathbf{\tilde{A}}^{(t - 1)}(\mathbb{I}, j_t) \mathbf{\tilde{A}}^{(t - 1)}(i_t, \mathbb{J}) \\
+    &\quad - s^{-1} \mathbf{A}(\mathbb{I}, j_t) \mathbf{\tilde{A}}^{(t - 1)}(i_t, \mathbb{J}) \\
+    &\quad - s^{-1} \mathbf{\tilde{A}}^{(t - 1)}(\mathbb{I}, j_t) \mathbf{A}(i_t, \mathbb{J}) \\
     &\quad + s^{-1} \mathbf{A}(\mathbb{I}, j_t) \mathbf{A}(i_t, \mathbb{J}) \\
 
-
-    
+    &= \mathbf{\tilde{A}}^{(t - 1)} + s^{-1} (\mathbf{A}(\mathbb{I}, j_t) - \mathbf{\tilde{A}}^{(t - 1)}(\mathbb{I}, j_t)) (\mathbf{A}(i_t, \mathbb{J}) - \mathbf{\tilde{A}}^{(t - 1)}(i_t, \mathbb{J})).
 \end{aligned}
 $$
+
+Note that
+
+$$
+\begin{aligned}
+    s = p^{(t)} - \mathbf{r}^{(t)} \mathbf{Q}^{(t - 1)} \mathbf{c}^{(t)} = \mathbf{A}(i_t, j_t) - \mathbf{\tilde{A}}^{(t - 1)}(i_t, j_t) &= \mathcal{E}^{(t - 1)}(i_t, j_t), \\
+    \mathbf{A}(\mathbb{I}, j_t) - \mathbf{\tilde{A}}^{(t - 1)}(\mathbb{I}, j_t) &= \mathcal{E}^{(t - 1)}(\mathbb{I}, j_t), \\
+    \mathbf{A}(i_t, \mathbb{J}) - \mathbf{\tilde{A}}^{(t - 1)}(i_t, \mathbb{J}) &= \mathcal{E}^{(t - 1)}(i_t, \mathbb{J}),
+\end{aligned}
+$$
+
+which leads to the final incremental update formula
+
+$$
+\mathbf{\tilde{A}}^{(t)} = \mathbf{\tilde{A}}^{(t - 1)} + \frac{1}{\mathcal{E}^{(t - 1)}(i_t, j_t)} \mathcal{E}^{(t - 1)}(\mathbb{I}, j_t) \mathcal{E}^{(t - 1)}(i_t, \mathbb{J}).
+$$
+
+Then, the algorithm goes as follows:
+
+1. Initialize $I = J = \emptyset, \mathbf{\tilde{A}}^{(0)} = \mathbf{0}, \mathcal{E}^{(0)} = \mathbf{A}$.
+
+2. At step $t$, find a new pivot $(i_t, j_t)$ that maximizes $\mathcal{E}^{(t - 1)}(i, j)$.
+
+3. Add the point $(i_t, j_t)$ to the sets $I$ and $J$.
+
+4. Update the matrices:
+    - $\mathcal{D}^{(t)} = \frac{1}{\mathcal{E}^{(t - 1)}(i_t, j_t)} \mathcal{E}^{(t - 1)}(\mathbb{I}, j_t) \mathcal{E}^{(t - 1)}(i_t, \mathbb{J})$;
+    - $\mathbf{\tilde{A}}^{(t)} = \mathbf{\tilde{A}}^{(t - 1)} + \mathcal{D}^{(t)}$;
+    - $\mathcal{E}^{(t)} = \mathcal{E}^{(t - 1)} - \mathcal{D}^{(t)}$.
+
+5. Repeat steps 2-4 until $|\mathcal{E}^{(t - 1)}(i_t, j_t)| \leq \epsilon$ or the maximum rank is reached.
+
+## Efficient ACA Algorithm
+
+The ACA algorithm skips the inverse computation of the pivot matrix, but it still requires to store the whole interpolation matrix $\mathbf{\tilde{A}}$ and the error matrix $\mathcal{E}$, which can be memory consuming for large matrices.
+
+To address this issue, one can represent the interpolation matrix $\mathbf{\tilde{A}}$ as a sum of rank-1 matrices, which only requires to store the factors of the rank-1 matrices instead of the whole matrix.
+
+That is, let
+
+$$
+\begin{aligned}
+    e_p^{(t)} &= \mathcal{E}^{(t - 1)}(i_t, j_t), \\
+    \mathbf{e}_c^{(t)} &= \mathcal{E}^{(t - 1)}(\mathbb{I}, j_t), \\
+    \mathbf{e}_r^{(t)} &= \mathcal{E}^{(t - 1)}(i_t, \mathbb{J}),
+\end{aligned}
+$$
+
+then one has
+
+$$
+\mathbf{\tilde{A}}^{(t)} = \sum_{k = 1}^{t} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}.
+$$
+
+Then, the algorithm goes as follows:
+
+1. Initialize $I = J = \emptyset$.
+
+2. At step $t$, find a new pivot $(i_t, j_t)$ that maximizes $\mathcal{E}^{(t - 1)}(i, j)$.
+    - For ``full search``, compute $\mathcal{E}^{(t - 1)} = \mathbf{A} - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}$;
+    - For ``rook search``:
+        - compute $\mathcal{E}^{(t - 1)}(\mathbb{I}, j_t) = \mathbf{A}(\mathbb{I}, j_t) - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}(\mathbb{I}, j_t)$,
+        - compute $\mathcal{E}^{(t - 1)}(i_t, \mathbb{J}) = \mathbf{A}(i_t, \mathbb{J}) - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)}(i_t) \mathbf{e}_r^{(k)}$.
+
+3. Add the point $(i_t, j_t)$ to the sets $I$ and $J$.
+
+4. Repeat steps 2-3 until $|\mathcal{E}^{(t - 1)}(i_t, j_t)| \leq \epsilon$ or the maximum rank is reached.
+
 
 
 
