@@ -82,25 +82,25 @@ def query_error_full(
 
 def full_search(
     query_matrix: Callable[[], torch.Tensor],
-    ps: torch.Tensor,
-    cs: torch.Tensor,
-    rs: torch.Tensor,
+    eps: torch.Tensor,
+    ecs: torch.Tensor,
+    ers: torch.Tensor,
 ) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     ### This way need the whole matrix fits in memory
-    error_full = query_error_full(query_matrix, ps, cs, rs)
+    error_full = query_error_full(query_matrix, eps, ecs, ers)
     i_star, j_star = torch.unravel_index(
         torch.argmax(error_full.abs()), error_full.size()
     )
     i_star, j_star = i_star.item(), j_star.item()
 
-    p = error_full[i_star, j_star]
-    c = error_full[:, j_star].clone()
-    r = error_full[i_star, :].clone()
+    ep = error_full[i_star, j_star]
+    ec = error_full[:, j_star].clone()
+    er = error_full[i_star, :].clone()
 
     del error_full
 
-    return i_star, j_star, p, c, r
+    return i_star, j_star, ep, ec, er
 
 
 class RookCondition(Enum):
@@ -112,38 +112,38 @@ def rook_search(
     query_matrix_element: Callable[[int, int], torch.Tensor],
     query_matrix_row: Callable[[int], torch.Tensor],
     query_matrix_column: Callable[[int], torch.Tensor],
-    ps: torch.Tensor,
-    cs: torch.Tensor,
-    rs: torch.Tensor,
+    eps: torch.Tensor,
+    ecs: torch.Tensor,
+    ers: torch.Tensor,
     max_iteration: int = 4,
 ) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     # pick the initial pivot
-    i_star = torch.randint(0, cs.size(1), (1,)).item()
+    i_star = torch.randint(0, ecs.size(1), (1,)).item()
     j_star = 0
-    p = None
-    c = None
-    r = None
+    ep = None
+    ec = None
+    er = None
 
     def rook_row():
-        nonlocal i_star, j_star, p, c, r
-        r = query_error_row(query_matrix_row, ps, cs, rs, i_star)
-        next_j = torch.argmax(r.abs()).item()
+        nonlocal i_star, j_star, ep, ec, er
+        er = query_error_row(query_matrix_row, eps, ecs, ers, i_star)
+        next_j = torch.argmax(er.abs()).item()
 
         moved = next_j != j_star
         j_star = next_j
-        p = r[j_star]
+        ep = er[j_star]
 
         return moved
 
     def rook_column():
-        nonlocal i_star, j_star, p, c, r
-        c = query_error_column(query_matrix_column, ps, cs, rs, j_star)
-        next_i = torch.argmax(c.abs()).item()
+        nonlocal i_star, j_star, ep, ec, er
+        ec = query_error_column(query_matrix_column, eps, ecs, ers, j_star)
+        next_i = torch.argmax(ec.abs()).item()
 
         moved = next_i != i_star
         i_star = next_i
-        p = c[i_star]
+        ep = ec[i_star]
 
         return moved
 
@@ -172,11 +172,11 @@ def rook_search(
 
             continue
 
-    r = query_error_row(query_matrix_row, ps, cs, rs, i_star)
-    c = query_error_column(query_matrix_column, ps, cs, rs, j_star)
-    p = query_error_element(query_matrix_element, ps, cs, rs, i_star, j_star)
+    er = query_error_row(query_matrix_row, eps, ecs, ers, i_star)
+    ec = query_error_column(query_matrix_column, eps, ecs, ers, j_star)
+    ep = query_error_element(query_matrix_element, eps, ecs, ers, i_star, j_star)
 
-    return i_star, j_star, p, c, r
+    return i_star, j_star, ep, ec, er
 
 
 def cross_interpolation(
@@ -204,7 +204,7 @@ def cross_interpolation(
 
     This function implements a greedy pivot searching algorithm (full/rook) to find the optimal sets of row and column indices (I and J) for cross-interpolation, such that the interpolation of the matrix based on these indices meets a specified error threshold.
 
-    The interpolation `A_tilde` is calculated as A_tilde = A[:, J] @ inv(A[I, J]) @ A[I, :]. However, the function does not return the interpolation directly. Instead, it returns the interface for computing the reconstruction. Namely, wrapper functions integrated with ps: [t, 1], cs: [t, m], rs: [t, n], where t = len(I) = len(J).
+    The interpolation `A_tilde` is calculated as A_tilde = A[:, J] @ inv(A[I, J]) @ A[I, :]. However, the function does not return the interpolation directly. Instead, it returns the anonymous functions for computing the interpolation (fully or at given locations).
 
     Arguments:
         query_matrix_element: A callable that takes two integers (i, j) and returns the element at position (i, j) of the matrix.
@@ -247,7 +247,7 @@ def cross_interpolation(
         case "full":
             assert query_matrix is not None, "query_matrix must be provided."
 
-            searcher = lambda p, c, r: full_search(query_matrix, p, c, r)
+            searcher = lambda args: full_search(query_matrix, *args)
 
         case "rook":
             assert (
@@ -258,13 +258,8 @@ def cross_interpolation(
                 query_matrix_column is not None
             ), "query_matrix_column must be provided."
 
-            searcher = lambda p, c, r: rook_search(
-                query_matrix_element,
-                query_matrix_row,
-                query_matrix_column,
-                p,
-                c,
-                r,
+            searcher = lambda args: rook_search(
+                query_matrix_element, query_matrix_row, query_matrix_column, *args
             )
 
         case _:
@@ -274,9 +269,9 @@ def cross_interpolation(
     device = element.device
     dtype = element.dtype
 
-    ps = torch.empty((0, 1), device=device, dtype=dtype)  # [t, 1]
-    cs = torch.empty((0, num_rows), device=device, dtype=dtype)  # [t, m]
-    rs = torch.empty((0, num_columns), device=device, dtype=dtype)  # [t, n]
+    eps = torch.empty((0, 1), device=device, dtype=dtype)  # [t, 1]
+    ecs = torch.empty((0, num_rows), device=device, dtype=dtype)  # [t, m]
+    ers = torch.empty((0, num_columns), device=device, dtype=dtype)  # [t, n]
 
     I: List[int] = []
     J: List[int] = []
@@ -284,9 +279,9 @@ def cross_interpolation(
 
     while len(pivots) < min(num_rows, num_columns):
         with torch.no_grad():
-            i_star, j_star, p, c, r = searcher(ps, cs, rs)
+            i_star, j_star, ep, ec, er = searcher((eps, ecs, ers))
 
-        if p.abs() < error_threshold:
+        if ep.abs() < error_threshold:
             break
 
         if (i_star, j_star) in pivots:
@@ -297,18 +292,18 @@ def cross_interpolation(
         J.append(j_star)
         pivots.add((i_star, j_star))
 
-        ps = torch.cat((ps, p[torch.newaxis, torch.newaxis]), dim=0)  # [t+1, 1]
-        cs = torch.cat((cs, c[torch.newaxis, :]), dim=0)  # [t+1, m]
-        rs = torch.cat((rs, r[torch.newaxis, :]), dim=0)  # [t+1, n]
+        eps = torch.cat((eps, ep[torch.newaxis, torch.newaxis]), dim=0)  # [t+1, 1]
+        ecs = torch.cat((ecs, ec[torch.newaxis, :]), dim=0)  # [t+1, m]
+        ers = torch.cat((ers, er[torch.newaxis, :]), dim=0)  # [t+1, n]
 
     return (
         I,
         J,
         (
-            lambda i, j: query_interpolation_element(ps, cs, rs, i, j),
-            lambda i: query_interpolation_row(ps, cs, rs, i),
-            lambda j: query_interpolation_column(ps, cs, rs, j),
-            lambda: query_interpolation_full(ps, cs, rs),
+            lambda i, j: query_interpolation_element(eps, ecs, ers, i, j),
+            lambda i: query_interpolation_row(eps, ecs, ers, i),
+            lambda j: query_interpolation_column(eps, ecs, ers, j),
+            lambda: query_interpolation_full(eps, ecs, ers),
         ),
     )
 
