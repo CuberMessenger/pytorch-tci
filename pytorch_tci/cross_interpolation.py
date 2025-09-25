@@ -5,79 +5,79 @@ from enum import Enum, auto
 
 
 def query_interpolation_element(
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     i: int,
     j: int,
 ) -> torch.Tensor:
-    return ((cs[:, [i]] * rs[:, [j]]) / ps).sum()
+    return ((ecs[:, [i]] * ers[:, [j]]) / eps).sum()
 
 
 def query_interpolation_column(
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     j: int,
 ) -> torch.Tensor:
-    return ((cs * rs[:, [j]]) / ps).sum(dim=0)
+    return ((ecs * ers[:, [j]]) / eps).sum(dim=0)
 
 
 def query_interpolation_row(
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     i: int,
 ) -> torch.Tensor:
-    return ((cs[:, [i]] * rs) / ps).sum(dim=0)
+    return ((ecs[:, [i]] * ers) / eps).sum(dim=0)
 
 
 def query_interpolation_full(
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
 ) -> torch.Tensor:
-    return (cs / ps).T @ rs
+    return (ecs / eps).T @ ers
 
 
 def query_error_element(
     query_matrix_element: Callable[[int, int], torch.Tensor],
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     i: int,
     j: int,
 ) -> torch.Tensor:
-    return query_matrix_element(i, j) - query_interpolation_element(ps, cs, rs, i, j)
+    return query_matrix_element(i, j) - query_interpolation_element(eps, ecs, ers, i, j)
 
 
 def query_error_column(
     query_matrix_column: Callable[[int], torch.Tensor],
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     j: int,
 ) -> torch.Tensor:
-    return query_matrix_column(j) - query_interpolation_column(ps, cs, rs, j)
+    return query_matrix_column(j) - query_interpolation_column(eps, ecs, ers, j)
 
 
 def query_error_row(
     query_matrix_row: Callable[[int], torch.Tensor],
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
     i: int,
 ) -> torch.Tensor:
-    return query_matrix_row(i) - query_interpolation_row(ps, cs, rs, i)
+    return query_matrix_row(i) - query_interpolation_row(eps, ecs, ers, i)
 
 
 def query_error_full(
     query_matrix: Callable[[], torch.Tensor],
-    ps: torch.Tensor,  # [t, 1]
-    cs: torch.Tensor,  # [t, m]
-    rs: torch.Tensor,  # [t, n]
+    eps: torch.Tensor,  # [t, 1]
+    ecs: torch.Tensor,  # [t, m]
+    ers: torch.Tensor,  # [t, n]
 ) -> torch.Tensor:
-    return query_matrix() - query_interpolation_full(ps, cs, rs)
+    return query_matrix() - query_interpolation_full(eps, ecs, ers)
 
 
 def full_search(
