@@ -1,6 +1,6 @@
-# Tensor cross interpolation (3d example)
+# Tensor cross interpolation (4d example)
 
-**Goal** - Given a tensor $\mathcal{A} \in \mathbb{R}^{n_1 \times n_2 \times n_3}$ build an low-rank interpolation $\mathcal{\tilde{A}} \in \mathbb{R}^{n_1 \times n_2 \times n_3}$ using a small set of fibers chosen greedily.
+**Goal** - Given a tensor $\mathcal{A} \in \mathbb{R}^{n_1 \times n_2 \times n_3 \times n_4}$ build an low-rank interpolation $\mathcal{\tilde{A}} \in \mathbb{R}^{n_1 \times n_2 \times n_3 \times n_4}$ using a small set of fibers chosen greedily.
 
 ## Notations
 
@@ -8,28 +8,51 @@ TBW
 
 ## Definition
 
-For a given tensor $\mathcal{A} \in \mathbb{R}^{n_1 \times n_2 \times n_3}$, the tensor cross interpolation is defined as:
+For a given tensor $\mathcal{A} \in \mathbb{R}^{n_1 \times n_2 \times n_3 \times n_4}$, the tensor cross interpolation is defined as:
 
 $$
-\mathcal{A} \approx \mathcal{\tilde{A}} = \mathcal{A}(\mathbb{I}_1, I_{\gt 1}) \mathcal{A}(I_{\leq 1}, I_{\gt 1})^{-1} \mathcal{A}(I_{\leq 1}, \mathbb{I}_2, I_{\gt 2}) \mathcal{A}(I_{\leq 2}, I_{\gt 2})^{-1} \mathcal{A}(I_{\leq 2}, \mathbb{I}_3)
+\mathcal{A} \approx \mathcal{\tilde{A}} = \mathcal{A}(\mathbb{S}_1, J_2) \mathcal{A}(I_1, J_2)^{-1} \mathcal{A}(I_1, \mathbb{S}_2, J_3) \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, \mathbb{S}_3, J_4) \mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, \mathbb{S}_4)
 $$
-
-where $\mathbb{I} = \{1, 2, ..., m\}$ and $\mathbb{J} = \{1, 2, ..., n\}$, while $I \subseteq \mathbb{I}$ and $J \subseteq \mathbb{J}$ with $|I| = |J| = r$.
 
 where
 
 $$
 \begin{aligned}
-    \mathbb{I}_1 &= \{1, 2, ..., n_1\}, \\
-    \mathbb{I}_2 &= \{1, 2, ..., n_2\}, \\
-    \mathbb{I}_3 &= \{1, 2, ..., n_3\}, \\
-    I_{\leq 1} &\subseteq \mathbb{I}_1, \\
-    I_{\gt 1} &\subseteq \mathbb{I}_2 \times \mathbb{I}_3, \\
-    I_{\leq 2} &\subseteq \mathbb{I}_1 \times \mathbb{I}_2, \\
-    I_{\gt 2} &\subseteq \mathbb{I}_3, \\
-    |I_{\leq k}| &= |I_{\gt k}| = r, \quad k = 1, 2.
+    \mathbb{S}_k &= \{1, 2, ..., n_k\}, \quad k = 1, 2, 3, 4, \\
+    I_1 &\subseteq \mathbb{S}_1, \\
+    I_2 &\subseteq \mathbb{S}_1 \times \mathbb{S}_2, \\
+    I_3 &\subseteq \mathbb{S}_1 \times \mathbb{S}_2 \times \mathbb{S}_3, \\
+    J_2 &\subseteq \mathbb{S}_2 \times \mathbb{S}_3 \times \mathbb{S}_4, \\
+    J_3 &\subseteq \mathbb{S}_3 \times \mathbb{S}_4, \\
+    J_4 &\subseteq \mathbb{S}_4, \\
+    |I_k| &= |J_k| = r.
 \end{aligned}
 $$
 
-Note that, $I_{\leq k}$ and $I_{\gt k}$ are sets of multi-indices. One should under stand the indexing by, for example, $I_{\leq k}$ will take care of the first $k$ dimensions, and $I_{\gt k}$ will take care of the last $d - k$ dimensions.
+Note that, $I_k$ and $J_k$ are sets of multi-indices, and a multi-index is a tuple of indices taking care of one or more dimensions. One should understand the indexing by, for example, $I_k$ will take care of the $(1, 2, ..., k)$ dimensions, and $J_k$ will take care of the $(k, k + 1, ..., d)$ dimensions. $d = 4$ in this example.
+
+### Interpolation
+To achieve the interpolation property, that is
+
+$$
+\mathcal{A}(I_{k - 1}, \mathbb{S}_k, J_{k + 1}) = \mathcal{\tilde{A}}(I_{k - 1}, \mathbb{S}_k, J_{k + 1}), \quad k = 1, 2, 3, 4,
+$$
+
+the index sets should satisfy the nestedness condition:
+
+$$
+\begin{aligned}
+    I_k &\subseteq I_{k - 1} \times \mathbb{S}_k, \\
+    J_k &\subseteq \mathbb{S}_k \times J_{k + 1}.
+\end{aligned}
+$$
+
+Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are not exist.
+
+
+
+
+
+
+
 
