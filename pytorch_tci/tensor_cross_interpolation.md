@@ -49,10 +49,12 @@ $$
 
 Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are not exist.
 
+## Naive algorithm (left-to-right sweep DMRG greedy CI)
 
+1. Initialize $I_k = J_k = \emptyset$, for $k = 1, 2, 3, 4$.
 
-
-
+2. For $k$ from $1$ to $4$ do ``// (loop over dimensions)``
+   - View the tensor as a matrix. That means, taking first $(k - 1)$ dimensions using $I_{k - 1}$ with a free dimension, then another free dimension and $J_{k + 1}$ for the rest dimensions. For example, when $k = 2$, we view the tensor as a matrix $\mathcal{A}(I_1 \times \mathbb{S}_2, \mathbb{S}_3 \times J_4) \in \mathbb{R}^{r_1 n_2 \times n_3 r_4}$.
 
 
 
