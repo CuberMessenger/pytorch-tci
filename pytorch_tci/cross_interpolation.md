@@ -304,8 +304,3 @@ Then, the algorithm goes as follows:
 3. Add the point $(i_t, j_t)$ to the sets $I$ and $J$.
 
 4. Repeat steps 2-3 until $|\mathcal{E}^{(t - 1)}(i_t, j_t)| \leq \epsilon$ or the maximum rank is reached.
-
-
-
-
-

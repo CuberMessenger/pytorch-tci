@@ -53,8 +53,18 @@ Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are
 
 1. Initialize $I_k = J_k = \emptyset$, for $k = 1, 2, 3, 4$.
 
-2. For $k$ from $1$ to $4$ do ``// (loop over dimensions)``
-   - View the tensor as a matrix. That means, taking first $(k - 1)$ dimensions using $I_{k - 1}$ with a free dimension, then another free dimension and $J_{k + 1}$ for the rest dimensions. For example, when $k = 2$, we view the tensor as a matrix $\mathcal{A}(I_1 \times \mathbb{S}_2, \mathbb{S}_3 \times J_4) \in \mathbb{R}^{r_1 n_2 \times n_3 r_4}$.
+2. For $k$ from $1$ to $4$ do ``// (left-to-right loop over dimensions)``
+   - Taking a matrix view from the tensor. That means, taking first $(k - 1)$ dimensions using $I_{k - 1}$ with a free dimension, then another free dimension and $J_{k + 1}$ for the rest dimensions. For example, when $k = 2$, we get a matrix $\mathcal{A}(I_1 \times \mathbb{S}_2, \mathbb{S}_3 \times J_4) \in \mathbb{R}^{r_1 n_2 \times n_3 r_4}$.
+   - Apply ``full/rook search`` on the matrix to find a new pivot $(i_k^*, j_{k + 1}^*)$.
+   - If the absolute error at position $(i_k^*, j_{k + 1}^*)$ is greater than the threshold $\epsilon$, update $I_k \leftarrow I_{k} \cup \{i_k^*\}$ and $J_{k + 1} \leftarrow J_{k + 1} \cup \{j_{k + 1}^*\}$.
+3. For $k$ from $4$ to $1$ do ``// (right-to-left loop over dimensions)``
+   - Do the same as step 2 but in the reverse order.
+
+4. Repeat step 2 and 3 until no new pivots are added in the two sweeps (one left-to-right, another right-to-left).
+
+
+
+
 
 
 
