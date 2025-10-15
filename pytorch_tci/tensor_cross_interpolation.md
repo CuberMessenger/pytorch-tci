@@ -62,7 +62,12 @@ Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are
 
 4. Repeat step 2 and 3 until no new pivots are added in the two sweeps (one left-to-right, another right-to-left).
 
+## Implementation tips
 
+### Query functions
+
+- There should be query functions for element, row, and column for each superblock matrix (aka "view").
+- Since there are CI for the superblock matrics in each inner step, the intermediate CI vectors ($e_p^{(t)}, \mathbf{e}_c^{(t)}, \mathbf{e}_r^{(t)}$) should be ephemeral and re-computed, due to the size of the view will change during the sweep.
 
 
 
