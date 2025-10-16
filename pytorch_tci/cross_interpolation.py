@@ -1,6 +1,6 @@
 import torch
 
-from typing import List, Tuple, Optional, Callable
+from typing import Optional, Callable
 from enum import Enum, auto
 
 
@@ -85,7 +85,7 @@ def full_search(
     eps: torch.Tensor,
     ecs: torch.Tensor,
     ers: torch.Tensor,
-) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     ### This way need the whole matrix fits in memory
     error_full = query_error_full(query_matrix, eps, ecs, ers)
@@ -116,7 +116,7 @@ def rook_search(
     ecs: torch.Tensor,
     ers: torch.Tensor,
     max_iteration: int = 4,
-) -> Tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[int, int, torch.Tensor, torch.Tensor, torch.Tensor]:
 
     # pick the initial pivot
     i_star = torch.randint(0, ecs.size(1), (1,)).item()
@@ -189,10 +189,10 @@ def cross_interpolation(
     matrix: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
-) -> Tuple[
-    List[int],
-    List[int],
-    Tuple[
+) -> tuple[
+    list[int],
+    list[int],
+    tuple[
         Callable[[int, int], torch.Tensor],
         Callable[[int], torch.Tensor],
         Callable[[int], torch.Tensor],
@@ -220,7 +220,7 @@ def cross_interpolation(
         error_threshold: The desired precision. The algorithm stops when the new pivot's error is below this threshold.
 
     Returns:
-        Tuple[List[int], List[int], Tuple[
+        tuple[list[int], list[int], tuple[
             Callable[[int, int], torch.Tensor],
             Callable[[int], torch.Tensor],
             Callable[[int], torch.Tensor],
@@ -273,8 +273,8 @@ def cross_interpolation(
     ecs = torch.empty((0, num_rows), device=device, dtype=dtype)  # [t, m]
     ers = torch.empty((0, num_columns), device=device, dtype=dtype)  # [t, n]
 
-    I: List[int] = []
-    J: List[int] = []
+    I: list[int] = []
+    J: list[int] = []
     pivots = set()
 
     while len(pivots) < min(num_rows, num_columns):
