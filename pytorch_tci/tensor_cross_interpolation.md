@@ -67,6 +67,8 @@ Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are
 ### Query functions
 
 - There should be query functions for element, row, and column for each superblock matrix (aka "view").
+- Another approach is to query fibers. That is like querying $\mathcal{A}(I_{k - 1}, \mathbb{I}_k, J_{k + 1}) \in \mathbb{R}^{|I_{k - 1}| \times n_k \times |J_{k + 1}|}$ or $\mathcal{A}(i_{k - 1}, \mathbb{I}_k, j_{k + 1}) \in \mathbb{R}^{n_k}$.
+- **For smoother implementation, I will first query superblocks in this stage.**
 - Since there are CI for the superblock matrics in each inner step, the intermediate CI vectors ($e_p^{(t)}, \mathbf{e}_c^{(t)}, \mathbf{e}_r^{(t)}$) should be ephemeral and re-computed, due to the size of the view will change during the sweep.
 
 
