@@ -1,4 +1,6 @@
 import torch
+
+from cross_interpolation import cross_interpolation
 from typing import List, Tuple, Callable, Optional, Union
 
 MultiIndex = tuple[Union[int, slice], ...]

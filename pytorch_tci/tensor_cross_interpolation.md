@@ -64,14 +64,44 @@ Note that, $I_0$ and $J_5$ are empty sets while the corresponding dimensions are
 
 ## Implementation tips
 
-### Query functions
+<!-- ### Query functions -->
 
-- There should be query functions for element, row, and column for each superblock matrix (aka "view").
+<!-- - There should be query functions for element, row, and column for each superblock matrix (aka "view").
 - Another approach is to query fibers. That is like querying $\mathcal{A}(I_{k - 1}, \mathbb{I}_k, J_{k + 1}) \in \mathbb{R}^{|I_{k - 1}| \times n_k \times |J_{k + 1}|}$ or $\mathcal{A}(i_{k - 1}, \mathbb{I}_k, j_{k + 1}) \in \mathbb{R}^{n_k}$.
-- **For smoother implementation, I will first query superblocks in this stage.**
-- Since there are CI for the superblock matrics in each inner step, the intermediate CI vectors ($e_p^{(t)}, \mathbf{e}_c^{(t)}, \mathbf{e}_r^{(t)}$) should be ephemeral and re-computed, due to the size of the view will change during the sweep.
+- **For smoother implementation, I will first query superblocks in this stage.** -->
+
+### Initialization
 
 
+- The sets need to be initialized satisfying the nestedness condition. A simple way is to set (for all valid $k$)
 
+$$
+I_k = {(1, 1, ..., 1)}, J_k = {(1, 1, ..., 1)}.
+$$
 
+- The cores (or glue matrices) are $\mathcal{A}_k = \mathcal{A}(I_k, J_{k + 1}) \in \mathbb{R}^{r_k \times r_{k + 1}}$. Then some building blocks $C_k(i_k) = \mathcal{A}(I_{k - 1}, i_k, J_{k + 1})$. They are identically, the terms in the interpolation formula. And the inverse and multiplications operations are done explicitly. It matches the complexity of the algorithm.
+
+- For now, I will find out the vectorized version of the above operations. Then implement the algorithm, and at last optimize the performance, maybe ACA.
+
+- When accessing the supercores, one can represent an element in a supercore using a similar formula as the interpolation one. And before high-frequency access, cache the left/right parts.
+
+- Whe na new pivot is selected, it is garanteed to satisfy the nestedness condition. And one can update only the affected parts. For example, say $\mathcal{A} \in \mathbb{R}^{3 \times 4 \times 3}$, and it has
+
+$$
+\begin{aligned}
+    I_1 &= \{1, 3\}, \\
+    J_2 &= \{(2, 2), (4, 3)\} \text{// pairs with } J_3, \\
+    I_2 &= \{(1, 2), (3, 1)\} \text{// pairs with } I_1, \\
+    J_3 &= \{2, 3\}.
+\end{aligned}
+$$
+
+Then, suppose a new pivot $(i_1^*, i_2^*, i_3^*) = (2, 1, 3)$ is selected (somehow mapped to the $n$ dimensional format). Then, we only need to update
+
+$$
+\begin{aligned}
+    I_1 &\leftarrow I_1 \cup \{2\} = \{1, 2, 3\}, \\
+    J_2 &\leftarrow J_2 \cup \{(1, 3)\} = \{(2, 2), (4, 3), (1, 3)\}.
+\end{aligned}
+$$
 
