@@ -14,7 +14,7 @@ $$
 \mathcal{A} \approx \mathcal{\tilde{A}} = \mathcal{A}(\mathbb{S}_1, J_2)
 \mathcal{A}(I_1, J_2)^{-1} \mathcal{A}(I_1, \mathbb{S}_2, J_3)
 \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, \mathbb{S}_3, J_4)
-\mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, \mathbb{S}_4)
+\mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, \mathbb{S}_4),
 $$
 
 where
@@ -40,7 +40,7 @@ $$
     &= \mathcal{A}(i_1, J_2)
     \mathcal{A}(I_1, J_2)^{-1} \mathcal{A}(I_1, i_2, J_3)
     \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, i_3, J_4)
-    \mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, i_4)
+    \mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, i_4).
 \end{aligned}
 $$
 
@@ -48,11 +48,14 @@ and the supercores can be viewed as, for example:
 
 $$
 \begin{aligned}
+    \mathcal{A}(I_1, \mathbb{S}_2, \mathbb{S}_3, J_4) & \in \mathbb{R}^{r \times n_2 \times n_3 \times r}, \\
     \mathcal{A}(I_1, \mathbb{S}_2, \mathbb{S}_3, J_4) & \approx \mathcal{\tilde{A}}(I_1, \mathbb{S}_2, \mathbb{S}_3, J_4) \\
     &= \mathcal{A}(I_1, J_2)
     \mathcal{A}(I_1, J_2)^{-1} \mathcal{A}(I_1, \mathbb{S}_2, J_3)
     \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, \mathbb{S}_3, J_4)
-    \mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, J_4)
+    \mathcal{A}(I_3, J_4)^{-1} \mathcal{A}(I_3, J_4) \\
+    &= \mathcal{A}(I_1, \mathbb{S}_2, J_3)
+    \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, \mathbb{S}_3, J_4)
 \end{aligned}
 $$
 
@@ -86,11 +89,11 @@ Consequently, a single element in the interpolation can be represented as:
 $$
 \begin{aligned}
     \mathcal{A}(i_1, i_2, \dots, i_d) & \approx \mathcal{\tilde{A}}(i_1, i_2, \dots, i_d) \\
-    &= \mathcal{A}(i_1, J_2)
-    \mathcal{A}(I_1, J_2)^{-1} \mathcal{A}(I_1, i_2, J_3)
-    \cdots
-    \mathcal{A}(I_{d - 2}, i_{d - 1}, J_d)
-    \mathcal{A}(I_{d - 1}, J_d)^{-1} \mathcal{A}(I_{d - 1}, i_d)
+    &= \mathcal{A}(i_1, J_2) \mathcal{A}(I_1, J_2)^{-1}  \\
+    &\quad \mathcal{A}(I_1, i_2, J_3) \mathcal{A}(I_2, J_3)^{-1} \mathcal{A}(I_2, i_3, J_4) \\
+    &\quad \cdots \\
+    &\quad \mathcal{A}(I_{d - 3}, i_{d - 2}, J_{d - 1}) \mathcal{A}(I_{d - 2}, J_{d - 1})^{-1} \mathcal{A}(I_{d - 2}, i_{d - 1}, J_d) \\
+    &\quad \mathcal{A}(I_{d - 1}, J_d)^{-1} \mathcal{A}(I_{d - 1}, i_d),
 \end{aligned}
 $$
 
@@ -98,8 +101,9 @@ and the supercores can be viewed as, for example:
 
 $$
 \begin{aligned}
+     \mathcal{A}(I_{k - 1}, \mathbb{S}_k, \mathbb{S}_{k + 1}, J_{k + 2}) & \in \mathbb{R}^{r \times n_k \times n_{k + 1} \times r} \\
     \mathcal{A}(I_{k - 1}, \mathbb{S}_k, \mathbb{S}_{k + 1}, J_{k + 2}) & \approx \mathcal{\tilde{A}}(I_{k - 1}, \mathbb{S}_k, \mathbb{S}_{k + 1}, J_{k + 2}) \\
-    &= ???
+    &= \mathcal{A}(I_{k - 1}, \mathbb{S}_k, J_{k + 1}) \mathcal{A}(I_k, J_{k + 1})^{-1} \mathcal{A}(I_k, \mathbb{S}_{k + 1}, J_{k + 2}).
 \end{aligned}
 $$
 
@@ -139,7 +143,6 @@ Note that, $I_0$ and $J_{d + 1}$ are empty sets while the corresponding dimensio
 ## Implementation tips
 
 ### Initialization
-
 
 - The sets need to be initialized satisfying the nestedness condition. A simple way is to set (for all valid $k$)
 
