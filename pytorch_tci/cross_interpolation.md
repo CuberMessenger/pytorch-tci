@@ -68,7 +68,7 @@ At **step 2**, there are two strategies to find the pivot, namely **full search*
 The ``full search`` strategy finds the pivot by searching through all the entries of the error matrix $\mathcal{E}$:
 
 $$
-(i^*, j^*) = \argmax_{i \in \mathbb{I}, j \in \mathbb{J}} \mathcal{E}(i, j).
+(i^*, j^*) = \operatorname*{arg\,max}_{i \in \mathbb{I}, j \in \mathbb{J}} \mathcal{E}(i, j).
 $$
 
 ### Rook search
@@ -79,21 +79,21 @@ The ``rook search`` strategy finds the pivot by alternatingly searching through 
 2. Column-wise movement:
 
 $$
-i^* \leftarrow \argmax_{i \in \mathbb{I}} \mathcal{E}(i, j^*).
+i^* \leftarrow \operatorname*{arg\,max}_{i \in \mathbb{I}} \mathcal{E}(i, j^*).
 $$
 
 3. Row-wise movement:
 
 $$
-j^* \leftarrow \argmax_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
+j^* \leftarrow \operatorname*{arg\,max}_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
 $$
 
 4. Repeat steps 2 and 3 until the limit of iterations is reached or the **rook condition** is met:
 
 $$
 \begin{aligned}
-    i^* &= \argmax_{i \in \mathbb{I}} \mathcal{E}(i, j^*), \\
-    j^* &= \argmax_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
+    i^* &= \operatorname*{arg\,max}_{i \in \mathbb{I}} \mathcal{E}(i, j^*), \\
+    j^* &= \operatorname*{arg\,max}_{j \in \mathbb{J}} \mathcal{E}(i^*, j).
 \end{aligned}
 $$
 
