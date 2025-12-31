@@ -304,3 +304,10 @@ Then, the algorithm goes as follows:
 3. Add the point $(i_t, j_t)$ to the sets $I$ and $J$.
 
 4. Repeat steps 2-3 until $|\mathcal{E}^{(t - 1)}(i_t, j_t)| \leq \epsilon$ or the maximum rank is reached.
+
+
+<!-- Export Note:
+1. pandoc input.md -s -o output.tex -H header.tex
+2. replace all the \$\$ with \[ \] in output.tex
+3. remove empty lines inside aligned
+4. build pdf with texlive -->
