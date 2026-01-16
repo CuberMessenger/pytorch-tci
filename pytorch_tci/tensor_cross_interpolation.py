@@ -1,15 +1,19 @@
 import torch
 
-from typing import List, Tuple, Callable, Optional, Union
+from typing import Callable, Optional
 
-MultiIndex = tuple[Union[int, slice], ...]
+MultiIndex = tuple[list[int] | slice, ...]
+
 
 def eqrange(a: int, b: int) -> range:
     return range(a, b + 1)
 
+
 def tensor_cross_interpolation(
     query_tensor_element: Optional[Callable[[MultiIndex], torch.Tensor]] = None,
-    query_tensor_superblock: Optional[Callable[[MultiIndex, MultiIndex], torch.Tensor]] = None,
+    query_tensor_superblock: Optional[
+        Callable[[MultiIndex, MultiIndex], torch.Tensor]
+    ] = None,
     query_tensor: Optional[Callable[[], torch.Tensor]] = None,
     size: Optional[list[int]] = None,
     tensor: Optional[torch.Tensor] = None,
@@ -18,7 +22,9 @@ def tensor_cross_interpolation(
 ):
     if tensor is not None:
         query_tensor_element = lambda I_a: tensor[I_a]
-        query_tensor_superblock = lambda I_km1, J_kp2: tensor[I_km1 + (slice(None), slice(None)) + J_kp2]
+        query_tensor_superblock = lambda I_km1, J_kp2: tensor[
+            I_km1 + (slice(None), slice(None)) + J_kp2
+        ]
         query_tensor = lambda: tensor
         size = tensor.size()
 
@@ -26,7 +32,9 @@ def tensor_cross_interpolation(
     dimension = len(size)
     assert dimension >= 3, "tensor must have at least 3 dimensions."
     assert query_tensor_element is not None, "query_tensor_element must be provided."
-    assert query_tensor_superblock is not None, "query_tensor_superblock must be provided."
+    assert (
+        query_tensor_superblock is not None
+    ), "query_tensor_superblock must be provided."
 
     match method:
         case "full":
@@ -37,32 +45,83 @@ def tensor_cross_interpolation(
 
         case _:
             raise ValueError(f"Unknown method: {method}")
-        
+
     element = query_tensor_element((0,) * dimension)
     device = element.device
     dtype = element.dtype
 
-    Is = [()] + [(0,) * k for k in eqrange(1, dimension - 1)]
+    ## A MultiIndex is a tuple, whose elements are either lists of integers or slices.
+    ## Is[k] is one MultiIndex with length k
+    ## Js[k] is one MultiIndex with length dimension - k + 1
+
+    Is = [()] + [tuple([0] for _ in range(k)) for k in eqrange(1, dimension - 1)]
     #    I_0     I_1, ..., I_{d-1}
     #   Is[0]   Is[1]      Is[d-1]
-    Js = [None, None] + [(0,) * (dimension - k) for k in eqrange(2, dimension)] + [()]
+    Js = (
+        [None, None]
+        + [tuple([0] for _ in range(dimension - k + 1)) for k in eqrange(2, dimension)]
+        + [()]
+    )
     #                    J_2, ..., J_d                                            J_{d+1}
     #                   Js[2]      Js[d]                                          Js[d+1]
+
+    # """
+    ### EXAMPLE ###
+
+    Is[0] = ()
+    Is[1] = ([2, 0],) # (2, ...) and (0, ...)
+    Is[2] = ([2, 2], [0, 1]) # (2, 0, ...) and (2, 1, ...)
+    Is[3] = ([2, 2], [0, 1], [3, 4]) # (2, 0, 3, ...) and (2, 1, 4, ...)
+    Is[4] = ([2, 2], [0, 1], [3, 4], [0, 5]) # (2, 0, 3, 0) and (2, 1, 4, 5)
+
+    Js[0] = None
+    Js[1] = None
+    Js[2] = ([1, 2], [2, 0], [3, 3], [1, 1]) # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
+    Js[3] = ([2, 0], [3, 3], [1, 1]) # (..., 2, 3, 1) and (..., 0, 3, 1)
+    Js[4] = ([3, 4], [1, 1]) # (..., 3, 1) and (..., 4, 1)
+    Js[5] = ([1, 4, 5],) # (..., 1) and (..., 4) and (..., 5)
+    Js[6] = ()
+
+    ### EXAMPLE ###
+    # """
+
     while True:
         # left-to-right sweep
         for k in eqrange(1, dimension - 1):
             # find a new pivot
             ## form the supercore
-            supercore = query_tensor_superblock(Is[k - 1], Js[k + 2]) # (r_{k - 1} n_k, n_{k + 1} r_{k + 2})
 
-            ## form the supercore approximation using current Is, Js
-            supercore_approx = ...
+            mi = Is[k - 1] + (slice(None), slice(None)) + Js[k + 2]
+            supercore = tensor[Is[k - 1] + (slice(None), slice(None))]
+            print(f"k = {k}, supercore: {list(supercore.size())}")
+            # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
+
+            # ## form the supercore approximation using current Is, Js
+            # supercore_approx = ...
+
+            # mi = Is[k - 1] + (slice(None),) + Js[k + 1]
+            # sca_l = query_tensor_element(mi)
+            # # r_{k - 1} * n_k * r_{k + 1}
+
+            # mi = Is[k] + Js[k + 1]
+            # sca_m = query_tensor_element(mi)
+            # # r_{k} * r_{k + 1}
+
+            # mi = Is[k] + (slice(None),) + Js[k + 2]
+            # sca_r = query_tensor_element(mi)
+            # # r_{k} * n_{k + 1} * r_{k + 2}
+
+            # print(
+            #     f"k = {k}, supercore_approx: {list(sca_l.size())} -- {list(sca_m.size())} -- {list(sca_r.size())}"
+            # )
 
             ## apply cross interpolation to the supercore
             ...
 
             # update Is[k], Js[k]
             ...
+
+        break
 
         # right-to-left sweep
         for k in reversed(range(1, dimension)):
@@ -75,4 +134,42 @@ def tensor_cross_interpolation(
         # check convergence
         ...
 
-        
+
+if __name__ == "__main__":
+    tensor = torch.randn(5, 6, 7, 8, 9)
+    # tci = tensor_cross_interpolation(tensor=tensor, method="rook")
+
+    tensor = torch.randn(5, 6, 7, 8, 9)
+
+    Is2 = ([2, 2], [0, 1]) # (2, 0, ...) and (2, 1, ...)
+    Js3 = ([1, 4, 5],) # (..., 1) and (..., 4) and (..., 5)
+
+    ### 1
+    superblock1 = torch.zeros((2, 7, 8, 3), dtype=tensor.dtype)
+    for l in range(2):
+        for i in range(7):
+            for j in range(8):
+                for r in range(3):
+                    mi = (Is2[0][l], Is2[1][l], i, j, Js3[0][r])
+                    superblock1[l, i, j, r] = tensor[mi]
+
+    ### 2
+    superblock2 = tensor[*Is2][..., *Js3]
+
+    ### 3
+    left = []
+    right = []
+    for Is in Is2:
+        left.append(torch.tensor(Is)[:, torch.newaxis])
+    for Js in Js3:
+        right.append(torch.tensor(Js)[torch.newaxis, :])
+
+    superblock3 = tensor[tuple(left + [slice(None), slice(None)] + right)]
+    superblock3 = superblock3.permute(0, 2, 3, 1)
+    # this always produce 4d tensor with the dims from Is and Js being moved to the 1st and 2nd dims
+
+    print(torch.allclose(superblock1, superblock2))
+    print(torch.allclose(superblock1, superblock3))
+
+    # print(superblock.size())
+
