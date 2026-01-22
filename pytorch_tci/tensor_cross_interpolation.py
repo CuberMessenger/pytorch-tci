@@ -2,18 +2,50 @@ import torch
 
 from typing import Callable, Optional
 
-MultiIndex = tuple[list[int] | slice, ...]
+MultiIndex = tuple[int | slice, ...]
+BatchedMultiIndex = tuple[list[list[int]] | slice, ...]
+"""
+For left-side batched multi-index, each dimension either:
+    a slice, or
+    a list of lists of integers, where the inner list always contains exact one int.
+
+For right-side batched multi-index, each dimension either:
+    a slice, or
+    a list of lists of integers, where the outer list always contains exact one list.
+
+For example,
+left = ([[2], [2]], [[0], [1]]) # two points (2, 0) and (2, 1) taking care of the first two dimensions
+right = ([[2, 3, 3]], [[1, 4, 5]]) # three points (2, 1), (3, 4), and (3, 5) taking care of the last two dimensions
+"""
 
 
 def eqrange(a: int, b: int) -> range:
     return range(a, b + 1)
 
 
+def query_tensor_superblock(
+    Is: MultiIndex,
+    Js: MultiIndex,
+    query_tensor_element: Callable[[MultiIndex], torch.Tensor] = None,
+    query_tensor_element_batched: Callable[[BatchedMultiIndex], torch.Tensor] = None,
+):
+    if query_tensor_element_batched is None:
+        raise NotImplementedError("Non-batched mode is not implemented yet.")
+    
+    # the dimensions taking cared by Is and Js are always moved to the front
+    if len(Is) == 0:
+        raise NotImplementedError("Special case of empty Is is not implemented yet.")
+
+    if len(Js) == 0:
+        raise NotImplementedError("Special case of empty Js is not implemented yet.")
+    
+    superblock = query_tensor_element_batched(Is + (slice(None), slice(None)) + Js).permute((0, 2, 3, 1))
+
+    return superblock    
+
 def tensor_cross_interpolation(
     query_tensor_element: Optional[Callable[[MultiIndex], torch.Tensor]] = None,
-    query_tensor_superblock: Optional[
-        Callable[[MultiIndex, MultiIndex], torch.Tensor]
-    ] = None,
+    query_tensor_element_batched: Optional[Callable[[BatchedMultiIndex], torch.Tensor]] = None,
     query_tensor: Optional[Callable[[], torch.Tensor]] = None,
     size: Optional[list[int]] = None,
     tensor: Optional[torch.Tensor] = None,
@@ -22,9 +54,7 @@ def tensor_cross_interpolation(
 ):
     if tensor is not None:
         query_tensor_element = lambda I_a: tensor[I_a]
-        query_tensor_superblock = lambda I_km1, J_kp2: tensor[
-            I_km1 + (slice(None), slice(None)) + J_kp2
-        ]
+        query_tensor_element_batched = lambda I_a: tensor[I_a]
         query_tensor = lambda: tensor
         size = tensor.size()
 
@@ -69,17 +99,17 @@ def tensor_cross_interpolation(
     ### EXAMPLE ###
 
     Is[0] = ()
-    Is[1] = ([2, 0],) # (2, ...) and (0, ...)
-    Is[2] = ([2, 2], [0, 1]) # (2, 0, ...) and (2, 1, ...)
-    Is[3] = ([2, 2], [0, 1], [3, 4]) # (2, 0, 3, ...) and (2, 1, 4, ...)
-    Is[4] = ([2, 2], [0, 1], [3, 4], [0, 5]) # (2, 0, 3, 0) and (2, 1, 4, 5)
+    Is[1] = ([[2], [0]],)  # (2, ...) and (0, ...)
+    Is[2] = ([[2], [2]], [[0], [1]])  # (2, 0, ...) and (2, 1, ...)
+    Is[3] = ([[2], [2]], [[0], [1]], [[3], [4]])  # (2, 0, 3, ...) and (2, 1, 4, ...)
+    Is[4] = ([[2], [2]], [[0], [1]], [[3], [4]], [[0], [5]])  # (2, 0, 3, 0) and (2, 1, 4, 5)
 
     Js[0] = None
     Js[1] = None
-    Js[2] = ([1, 2], [2, 0], [3, 3], [1, 1]) # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
-    Js[3] = ([2, 0], [3, 3], [1, 1]) # (..., 2, 3, 1) and (..., 0, 3, 1)
-    Js[4] = ([3, 4], [1, 1]) # (..., 3, 1) and (..., 4, 1)
-    Js[5] = ([1, 4, 5],) # (..., 1) and (..., 4) and (..., 5)
+    Js[2] = ([[1, 2]], [[2, 0]], [[3, 3]], [[1, 1]])  # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
+    Js[3] = ([[2, 0]], [[3, 3]], [[1, 1]])  # (..., 2, 3, 1) and (..., 0, 3, 1)
+    Js[4] = ([[3, 4]], [[1, 1]])  # (..., 3, 1) and (..., 4, 1)
+    Js[5] = ([[1, 4, 5]],)  # (..., 1) and (..., 4) and (..., 5)
     Js[6] = ()
 
     ### EXAMPLE ###
@@ -91,8 +121,12 @@ def tensor_cross_interpolation(
             # find a new pivot
             ## form the supercore
 
-            mi = Is[k - 1] + (slice(None), slice(None)) + Js[k + 2]
-            supercore = tensor[Is[k - 1] + (slice(None), slice(None))]
+            supercore = query_tensor_superblock(
+                Is=Is[k - 1],
+                Js=Js[k + 2],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
             print(f"k = {k}, supercore: {list(supercore.size())}")
             # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
 
@@ -135,14 +169,11 @@ def tensor_cross_interpolation(
         ...
 
 
-if __name__ == "__main__":
-    tensor = torch.randn(5, 6, 7, 8, 9)
-    # tci = tensor_cross_interpolation(tensor=tensor, method="rook")
-
+def test_take_superblock():
     tensor = torch.randn(5, 6, 7, 8, 9)
 
-    Is2 = ([2, 2], [0, 1]) # (2, 0, ...) and (2, 1, ...)
-    Js3 = ([1, 4, 5],) # (..., 1) and (..., 4) and (..., 5)
+    Is2 = ([2, 2], [0, 1])  # (2, 0, ...) and (2, 1, ...)
+    Js5 = ([1, 4, 5],)  # (..., 1) and (..., 4) and (..., 5)
 
     ### 1
     superblock1 = torch.zeros((2, 7, 8, 3), dtype=tensor.dtype)
@@ -150,19 +181,15 @@ if __name__ == "__main__":
         for i in range(7):
             for j in range(8):
                 for r in range(3):
-                    mi = (Is2[0][l], Is2[1][l], i, j, Js3[0][r])
+                    mi = (Is2[0][l], Is2[1][l], i, j, Js5[0][r])
                     superblock1[l, i, j, r] = tensor[mi]
 
     ### 2
-    superblock2 = tensor[*Is2][..., *Js3]
+    superblock2 = tensor[*Is2][..., *Js5]
 
     ### 3
-    left = []
-    right = []
-    for Is in Is2:
-        left.append(torch.tensor(Is)[:, torch.newaxis])
-    for Js in Js3:
-        right.append(torch.tensor(Js)[torch.newaxis, :])
+    left = [[[2], [2]], [[0], [1]]]
+    right = [[[1, 4, 5]]]
 
     superblock3 = tensor[tuple(left + [slice(None), slice(None)] + right)]
     superblock3 = superblock3.permute(0, 2, 3, 1)
@@ -171,5 +198,46 @@ if __name__ == "__main__":
     print(torch.allclose(superblock1, superblock2))
     print(torch.allclose(superblock1, superblock3))
 
-    # print(superblock.size())
+    print(superblock1.size())
 
+
+def test_take_fiber():
+    tensor = torch.randn(5, 6, 7, 8, 9)
+
+    Is2 = ([2, 2], [0, 1])  # (2, 0, ...) and (2, 1, ...)
+    Js4 = (
+        [2, 3, 3],
+        [1, 4, 5],
+    )  # (..., 2, 1) and (..., 3, 4) and (..., 3, 5)
+
+    ### 1
+    fiber1 = torch.zeros((2, 7, 3), dtype=tensor.dtype)
+    for l in range(2):
+        for i in range(7):
+            for r in range(3):
+                mi = (Is2[0][l], Is2[1][l], i, Js4[0][r], Js4[1][r])
+                fiber1[l, i, r] = tensor[mi]
+
+    ### 2
+    fiber2 = tensor[*Is2][..., *Js4]
+
+    ### 3
+    left = [[[2], [2]], [[0], [1]]]
+    right = [[[2, 3, 3]], [[1, 4, 5]]]
+
+    fiber3 = tensor[tuple(left + [slice(None)] + right)]
+
+    fiber3 = fiber3.permute(0, 2, 1)
+
+    print(torch.allclose(fiber1, fiber2))
+    print(torch.allclose(fiber1, fiber3))
+
+    print(fiber1.size())
+
+
+if __name__ == "__main__":
+    tensor = torch.randn(5, 6, 7, 8, 9)
+    tci = tensor_cross_interpolation(tensor=tensor, method="rook")
+
+    # test_take_fiber()
+    # test_take_superblock()
