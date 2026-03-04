@@ -121,5 +121,67 @@ def main():
     """
 
 
+def test_asymptotically_smooth():
+    """
+    k(x, y) = 1 / (4 * pi * |x - y|)
+    x range: -5 to 5
+    y range: -5 to 5
+    """
+
+    x_range = torch.linspace(-5, 5, 1000).cuda()
+    y_range = torch.linspace(-5, 5, 1000).cuda()
+
+    def query_matrix_element(x, y):
+        return 1 / (torch.abs(torch.tensor(x - y).cuda()) * 4 * torch.pi)
+
+    def query_matrix_row(y):
+        return 1 / (torch.abs(x_range - y) * 4 * torch.pi)
+
+    def query_matrix_column(x):
+        return 1 / (torch.abs(x - y_range) * 4 * torch.pi)
+
+    def query_matrix():
+        return 1 / (torch.abs(x_range[:, None] - y_range[None, :]) * 4 * torch.pi)
+    
+    reference_matrix = query_matrix()
+    
+    device = torch.device("cuda")
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats(device)
+
+    I, J, (_, _, _, query_interpolation_matrix) = cross_interpolation(
+        query_matrix_element=query_matrix_element,
+        query_matrix_row=query_matrix_row,
+        query_matrix_column=query_matrix_column,
+        query_matrix=query_matrix,
+        num_rows=1000,
+        num_columns=1000,
+        method="full",
+        error_threshold=1e-2,
+    )
+
+    torch.cuda.synchronize()
+
+    try:
+        pivots_inverse = torch.linalg.inv(reference_matrix[I, :][:, J])
+        inv_relative_error = compute_relative_error(
+            reference_matrix, reference_matrix[:, J] @ pivots_inverse @ reference_matrix[I, :]
+        )
+    except Exception as e:
+        print(e)
+        inv_relative_error = float("inf")
+
+    relative_error = compute_relative_error(reference_matrix, query_interpolation_matrix())
+
+    print(f"Results of testing asymptotically smooth kernel:")
+    print(
+        f"Inverse relative error (%):\t{inv_relative_error * 100:.2f}"
+    )
+    print(
+        f"Relative error (%):\t{relative_error * 100:.2f}"
+    )
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    test_asymptotically_smooth()
