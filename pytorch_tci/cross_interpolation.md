@@ -298,7 +298,7 @@ Then, the algorithm goes as follows:
 2. At step $t$, find a new pivot $(i_t, j_t)$ that maximizes $\mathcal{E}^{(t - 1)}(i, j)$.
     - For ``full search``, compute $\mathcal{E}^{(t - 1)} = \mathbf{A} - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}$;
     - For ``rook search``:
-        - compute $\mathcal{E}^{(t - 1)}(\mathbb{I}, j_t) = \mathbf{A}(\mathbb{I}, j_t) - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}(\mathbb{I}, j_t)$,
+        - compute $\mathcal{E}^{(t - 1)}(\mathbb{I}, j_t) = \mathbf{A}(\mathbb{I}, j_t) - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)} \mathbf{e}_r^{(k)}(j_t)$,
         - compute $\mathcal{E}^{(t - 1)}(i_t, \mathbb{J}) = \mathbf{A}(i_t, \mathbb{J}) - \sum_{k = 1}^{t - 1} \frac{1}{e_p^{(k)}} \mathbf{e}_c^{(k)}(i_t) \mathbf{e}_r^{(k)}$.
 
 3. Add the point $(i_t, j_t)$ to the sets $I$ and $J$.
