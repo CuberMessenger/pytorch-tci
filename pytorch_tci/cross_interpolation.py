@@ -313,24 +313,3 @@ if __name__ == "__main__":
     matrix = (torch.randn(M, r) @ torch.randn(r, N)).cuda()
 
     I, J, _ = cross_interpolation(matrix=matrix, method="rook", error_threshold=1e-3)
-
-    # import matplotlib.pyplot as plot
-
-    # figure, axis = plot.subplots(1, 2, dpi=200, figsize=(12, 6))
-
-    # x = torch.arange(1, len(relative_errors) + 1)
-    # y = torch.tensor(relative_errors) * 100
-
-    # axis[0].plot(x, y, marker="o")
-    # axis[0].set_xlabel("Iteration", fontsize=12)
-    # axis[0].set_ylabel("Relative Error (%)", fontsize=12)
-    # axis[0].set_title(f"Relative Error with N={N}, r={r}", fontsize=12)
-
-    # x = torch.arange(1, len(num_singulars) + 1)
-    # y = torch.tensor(num_singulars)
-    # axis[1].plot(x, y, marker="o", color="orange")
-    # axis[1].set_xlabel("Iteration", fontsize=12)
-    # axis[1].set_ylabel("# Singular Values", fontsize=12)
-    # axis[1].set_title(f"# Singular Values in E with N={N}, r={r}", fontsize=12)
-
-    # plot.show()
