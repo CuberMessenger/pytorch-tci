@@ -296,6 +296,15 @@ def cross_interpolation(
         ecs = torch.cat((ecs, ec[torch.newaxis, :]), dim=0)  # [t+1, m]
         ers = torch.cat((ers, er[torch.newaxis, :]), dim=0)  # [t+1, n]
 
+        ###
+        error_matrix = query_error_full(query_matrix, eps, ecs, ers)
+        singular_values = torch.linalg.svdvals(error_matrix)
+        print(
+            f"pivot: ({i_star}, {j_star}), error: {ep.abs().item():.3e}, "
+            f"max singular value: {singular_values[0].item():.3e}"
+        )
+        ###
+
     return (
         I,
         J,

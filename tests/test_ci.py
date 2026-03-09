@@ -78,6 +78,7 @@ def test_ci_single(matrix, method):
     except Exception as e:
         print(e)
         inv_relative_error = float("inf")
+        inv_absolute_error = float("inf")
 
     query_approximation = query_interpolation_matrix()
     relative_error = compute_relative_error(matrix, query_approximation)
@@ -151,33 +152,30 @@ def test_ci(N, r, method, num_iterations, test_type="random"):
         f"Memory cost:\t\t{memory_costs.mean().item():.2f} ± {memory_costs.std().item():.2f} MB"
     )
 
+def debug_ci(N, r, test_type, method):
+    if test_type == "random":
+        prepare_test_matrix = lambda: prepare_random_matrix(N, r)
+    elif test_type == "smooth":
+        prepare_test_matrix = lambda: prepare_asymptotically_smooth_matrix(N, dim=5)
+
+    matrix = prepare_test_matrix().cuda()
+    result = test_ci_single(matrix, method)
+    print(result)
+
 
 def main():
-    # N, r = 30, 10
-    # test_ci(N, r, method="rook", num_iterations=1)
-    # test_ci_single(prepare_test_matrix(N, r).cuda(), method="rook")
+    N, r = 400, 80
+    test_type = "smooth"
+    method = "rook"
+    debug_ci(N, r, test_type, method)
 
-    # N, r = 240, 120
-    N, r = 1000, 800
-    # N, r = 4000, 500
-    # N, r = 8000, 4000
+    # # N, r = 240, 120
+    # N, r = 1000, 800
+    # # N, r = 4000, 500
+    # # N, r = 8000, 4000
 
-    test_ci(N, r, method="full", num_iterations=10, test_type="smooth")
-    test_ci(N, r, method="rook", num_iterations=10, test_type="smooth")
-
-    """
-    N, r = 240, 60
-
-    []
-    Results of testing full for 16 iterations:
-    Relative error (%):     0.0016677120584063232 ± 0.0005922380751144374
-    Time cost (ms):         48.1142578125 ± 2.977712631225586
-    Memory cost (MB):       0.8099840879440308 ± 6.155941179031288e-08
-    Results of testing rook for 16 iterations:
-    Relative error (%):     0.2969968132674694 ± 1.180540770292282
-    Time cost (ms):         123.07276153564453 ± 19.904434204101562
-    Memory cost (MB):       0.22867199778556824 ± 0.032856881618499756
-    """
+    # test_ci(N, r, method="full", num_iterations=10, test_type="smooth")
+    # test_ci(N, r, method="rook", num_iterations=10, test_type="smooth")
 
 
 if __name__ == "__main__":
