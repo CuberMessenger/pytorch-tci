@@ -23,6 +23,34 @@ def eqrange(a: int, b: int) -> range:
     return range(a, b + 1)
 
 
+def query_tensor_superfiber(
+    Is: MultiIndex,
+    Js: MultiIndex,
+    query_tensor_element: Callable[[MultiIndex], torch.Tensor] = None,
+    query_tensor_element_batched: Callable[[BatchedMultiIndex], torch.Tensor] = None,
+):
+    if query_tensor_element_batched is None:
+        raise NotImplementedError("Non-batched mode is not implemented yet.")
+
+    if len(Is) == 0:
+        superfiber = query_tensor_element_batched((slice(None),) + Js)
+        # (free_dim, 1, batch_J)
+        superfiber = superfiber.permute((1, 0, 2))
+        # (1, free_dim, batch_J)
+    elif len(Js) == 0:
+        superfiber = query_tensor_element_batched(Is + (slice(None),))
+        # (batch_I, 1, free_dim)
+        superfiber = superfiber.permute((0, 2, 1))
+        # (batch_I, free_dim, 1)
+    else:
+        superfiber = query_tensor_element_batched(Is + (slice(None),) + Js)
+        # (batch_I, batch_J, free_dim)
+        superfiber = superfiber.permute((0, 2, 1))
+        # (batch_I, free_dim, batch_J)
+
+    return superfiber
+
+
 def query_tensor_superblock(
     Is: MultiIndex,
     Js: MultiIndex,
@@ -31,21 +59,41 @@ def query_tensor_superblock(
 ):
     if query_tensor_element_batched is None:
         raise NotImplementedError("Non-batched mode is not implemented yet.")
+
+    """
+    Format advanced indexing results to ensure the output shape is always
+    (batch_I, free_dim1, free_dim2, batch_J).
     
-    # the dimensions taking cared by Is and Js are always moved to the front
+    PyTorch advanced indexing behavior:
+    - If batched indices (Is, Js) are separated by slices, they are all moved to the front.
+    - If not separated by slices (e.g., Is or Js is empty), the batched indices 
+      stay at the position of the first advanced index.
+    """
+
     if len(Is) == 0:
-        raise NotImplementedError("Special case of empty Is is not implemented yet.")
+        superblock = query_tensor_element_batched((slice(None), slice(None)) + Js)
+        # (free_dim1, free_dim2, 1, batch_J)
+        superblock = superblock.permute((2, 0, 1, 3))
+        # (1, free_dim1, free_dim2, batch_J)
+    elif len(Js) == 0:
+        superblock = query_tensor_element_batched(Is + (slice(None), slice(None)))
+        # (batch_I, 1, free_dim1, free_dim2)
+        superblock = superblock.permute((0, 2, 3, 1))
+        # (batch_I, free_dim1, free_dim2, 1)
+    else:
+        superblock = query_tensor_element_batched(Is + (slice(None), slice(None)) + Js)
+        # (batch_I, batch_J, free_dim1, free_dim2)
+        superblock = superblock.permute((0, 2, 3, 1))
+        # (batch_I, free_dim1, free_dim2, batch_J)
 
-    if len(Js) == 0:
-        raise NotImplementedError("Special case of empty Js is not implemented yet.")
-    
-    superblock = query_tensor_element_batched(Is + (slice(None), slice(None)) + Js).permute((0, 2, 3, 1))
+    return superblock
 
-    return superblock    
 
 def tensor_cross_interpolation(
     query_tensor_element: Optional[Callable[[MultiIndex], torch.Tensor]] = None,
-    query_tensor_element_batched: Optional[Callable[[BatchedMultiIndex], torch.Tensor]] = None,
+    query_tensor_element_batched: Optional[
+        Callable[[BatchedMultiIndex], torch.Tensor]
+    ] = None,
     query_tensor: Optional[Callable[[], torch.Tensor]] = None,
     size: Optional[list[int]] = None,
     tensor: Optional[torch.Tensor] = None,
@@ -96,23 +144,25 @@ def tensor_cross_interpolation(
     #                   Js[2]      Js[d]                                          Js[d+1]
 
     # """
+    # fmt: off
     ### EXAMPLE ###
 
     Is[0] = ()
-    Is[1] = ([[2], [0]],)  # (2, ...) and (0, ...)
-    Is[2] = ([[2], [2]], [[0], [1]])  # (2, 0, ...) and (2, 1, ...)
-    Is[3] = ([[2], [2]], [[0], [1]], [[3], [4]])  # (2, 0, 3, ...) and (2, 1, 4, ...)
-    Is[4] = ([[2], [2]], [[0], [1]], [[3], [4]], [[0], [5]])  # (2, 0, 3, 0) and (2, 1, 4, 5)
+    Is[1] = ([[2], [0]],)                                       # (2, ...) and (0, ...)
+    Is[2] = ([[2], [2]], [[0], [1]])                            # (2, 0, ...) and (2, 1, ...)
+    Is[3] = ([[2], [2]], [[0], [1]], [[3], [4]])                # (2, 0, 3, ...) and (2, 1, 4, ...)
+    Is[4] = ([[2], [2]], [[0], [1]], [[3], [4]], [[0], [5]])    # (2, 0, 3, 0, ...) and (2, 1, 4, 5, ...)
 
     Js[0] = None
     Js[1] = None
-    Js[2] = ([[1, 2]], [[2, 0]], [[3, 3]], [[1, 1]])  # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
-    Js[3] = ([[2, 0]], [[3, 3]], [[1, 1]])  # (..., 2, 3, 1) and (..., 0, 3, 1)
-    Js[4] = ([[3, 4]], [[1, 1]])  # (..., 3, 1) and (..., 4, 1)
-    Js[5] = ([[1, 4, 5]],)  # (..., 1) and (..., 4) and (..., 5)
+    Js[2] = ([[1, 2]], [[2, 0]], [[3, 3]], [[1, 1]])            # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
+    Js[3] = ([[2, 0]], [[3, 3]], [[1, 1]])                      # (..., 2, 3, 1) and (..., 0, 3, 1)
+    Js[4] = ([[3, 4]], [[1, 1]])                                # (..., 3, 1) and (..., 4, 1)
+    Js[5] = ([[1, 4, 5]],)                                      # (..., 1) and (..., 4) and (..., 5)
     Js[6] = ()
 
     ### EXAMPLE ###
+    # fmt: on
     # """
 
     while True:
@@ -130,24 +180,39 @@ def tensor_cross_interpolation(
             print(f"k = {k}, supercore: {list(supercore.size())}")
             # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
 
-            # ## form the supercore approximation using current Is, Js
-            # supercore_approx = ...
+            ## form the supercore approximation using current Is, Js
 
-            # mi = Is[k - 1] + (slice(None),) + Js[k + 1]
-            # sca_l = query_tensor_element(mi)
-            # # r_{k - 1} * n_k * r_{k + 1}
+            supercore_approximation_left = query_tensor_superfiber(
+                Is[k - 1],
+                Js[k + 1],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
+            # r_{k - 1} * n_k * r_{k + 1}
 
-            # mi = Is[k] + Js[k + 1]
-            # sca_m = query_tensor_element(mi)
-            # # r_{k} * r_{k + 1}
+            supercore_approximation_middle = query_tensor_element_batched(
+                Is[k] + Js[k + 1]
+            )
+            # r_{k} * r_{k + 1}
 
-            # mi = Is[k] + (slice(None),) + Js[k + 2]
-            # sca_r = query_tensor_element(mi)
-            # # r_{k} * n_{k + 1} * r_{k + 2}
+            supercore_approximation_right = query_tensor_superfiber(
+                Is[k],
+                Js[k + 2],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
+            # r_{k} * n_{k + 1} * r_{k + 2}
 
-            # print(
-            #     f"k = {k}, supercore_approx: {list(sca_l.size())} -- {list(sca_m.size())} -- {list(sca_r.size())}"
-            # )
+            supercore_approximation = torch.einsum(
+                "apc,cb,bqd->apqd",
+                supercore_approximation_left,
+                torch.linalg.pinv(supercore_approximation_middle),
+                supercore_approximation_right,
+            )
+
+            print(
+                f"k = {k}, supercore approximation: {list(supercore_approximation.size())}"
+            )
 
             ## apply cross interpolation to the supercore
             ...
