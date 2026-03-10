@@ -1,6 +1,7 @@
 import torch
 
 from typing import Callable, Optional
+from enum import Enum, auto
 
 MultiIndex = tuple[int | slice, ...]
 BatchedMultiIndex = tuple[list[list[int]] | slice, ...]
@@ -89,6 +90,95 @@ def query_tensor_superblock(
     return superblock
 
 
+class RookCondition(Enum):
+    RULES_ROW = auto()
+    RULES_COLUMN = auto()
+
+
+def full_search(
+    error_tensor: torch.Tensor,
+) -> tuple[int, int, int, int, torch.Tensor]:
+    a_star, i_star, j_star, b_star = torch.unravel_index(
+        torch.argmax(error_tensor.abs()), error_tensor.size()
+    )
+    a_star, i_star, j_star, b_star = (
+        a_star.item(),
+        i_star.item(),
+        j_star.item(),
+        b_star.item(),
+    )
+    ep = error_tensor[a_star, i_star, j_star, b_star]
+
+    return a_star, i_star, j_star, b_star, ep
+
+
+def rook_search(
+    error_tensor: torch.Tensor,
+    max_iteration: int = 4,
+) -> tuple[int, int, int, int, torch.Tensor]:
+    a_star = torch.randint(0, error_tensor.size(0), (1,)).item()
+    i_star = torch.randint(0, error_tensor.size(1), (1,)).item()
+    j_star = 0
+    b_star = 0
+    ep = None
+
+    def rook_row():
+        nonlocal a_star, i_star, j_star, b_star, ep
+        slice_row = error_tensor[a_star, i_star, :, :]
+        next_j, next_b = torch.unravel_index(
+            torch.argmax(slice_row.abs()), slice_row.size()
+        )
+        next_j, next_b = next_j.item(), next_b.item()
+
+        moved = (next_j != j_star) or (next_b != b_star)
+        j_star, b_star = next_j, next_b
+        ep = error_tensor[a_star, i_star, j_star, b_star]
+
+        return moved
+
+    def rook_column():
+        nonlocal a_star, i_star, j_star, b_star, ep
+        slice_col = error_tensor[:, :, j_star, b_star]
+        next_a, next_i = torch.unravel_index(
+            torch.argmax(slice_col.abs()), slice_col.size()
+        )
+        next_a, next_i = next_a.item(), next_i.item()
+
+        moved = (next_a != a_star) or (next_i != i_star)
+        a_star, i_star = next_a, next_i
+        ep = error_tensor[a_star, i_star, j_star, b_star]
+
+        return moved
+
+    rook_row()
+    rook_condition = RookCondition.RULES_ROW
+
+    for _ in range(max_iteration - 1):
+        if rook_condition is RookCondition.RULES_ROW:
+            moved = rook_column()
+
+            if moved:
+                rook_condition = RookCondition.RULES_COLUMN
+            else:
+                break
+
+            continue
+
+        if rook_condition is RookCondition.RULES_COLUMN:
+            moved = rook_row()
+
+            if moved:
+                rook_condition = RookCondition.RULES_ROW
+            else:
+                break
+
+            continue
+
+    ep = error_tensor[a_star, i_star, j_star, b_star]
+
+    return a_star, i_star, j_star, b_star, ep
+
+
 def tensor_cross_interpolation(
     query_tensor_element: Optional[Callable[[MultiIndex], torch.Tensor]] = None,
     query_tensor_element_batched: Optional[
@@ -116,10 +206,10 @@ def tensor_cross_interpolation(
 
     match method:
         case "full":
-            ...
+            searcher = lambda args: full_search(*args)
 
         case "rook":
-            ...
+            searcher = lambda args: rook_search(*args)
 
         case _:
             raise ValueError(f"Unknown method: {method}")
@@ -132,12 +222,12 @@ def tensor_cross_interpolation(
     ## Is[k] is one MultiIndex with length k
     ## Js[k] is one MultiIndex with length dimension - k + 1
 
-    Is = [()] + [tuple([0] for _ in range(k)) for k in eqrange(1, dimension - 1)]
+    Is = [()] + [tuple([[0]] for _ in range(k)) for k in eqrange(1, dimension - 1)]
     #    I_0     I_1, ..., I_{d-1}
     #   Is[0]   Is[1]      Is[d-1]
     Js = (
         [None, None]
-        + [tuple([0] for _ in range(dimension - k + 1)) for k in eqrange(2, dimension)]
+        + [tuple([[0]] for _ in range(k)) for k in eqrange(2, dimension)]
         + [()]
     )
     #                    J_2, ..., J_d                                            J_{d+1}
@@ -148,24 +238,43 @@ def tensor_cross_interpolation(
     ### EXAMPLE ###
 
     Is[0] = ()
-    Is[1] = ([[2], [0]],)                                       # (2, ...) and (0, ...)
-    Is[2] = ([[2], [2]], [[0], [1]])                            # (2, 0, ...) and (2, 1, ...)
-    Is[3] = ([[2], [2]], [[0], [1]], [[3], [4]])                # (2, 0, 3, ...) and (2, 1, 4, ...)
-    Is[4] = ([[2], [2]], [[0], [1]], [[3], [4]], [[0], [5]])    # (2, 0, 3, 0, ...) and (2, 1, 4, 5, ...)
+    Is[1] = ([[0]],)
+    Is[2] = ([[0]], [[0]],)
+    Is[3] = ([[0]], [[0]], [[0]],)
+    Is[4] = ([[0]], [[0]], [[0]], [[0]],)
 
     Js[0] = None
     Js[1] = None
-    Js[2] = ([[1, 2]], [[2, 0]], [[3, 3]], [[1, 1]])            # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
-    Js[3] = ([[2, 0]], [[3, 3]], [[1, 1]])                      # (..., 2, 3, 1) and (..., 0, 3, 1)
-    Js[4] = ([[3, 4]], [[1, 1]])                                # (..., 3, 1) and (..., 4, 1)
-    Js[5] = ([[1, 4, 5]],)                                      # (..., 1) and (..., 4) and (..., 5)
+    Js[2] = ([[0, 0, 0, 0]],)
+    Js[3] = ([[0, 0, 0]],)
+    Js[4] = ([[0, 0]],)
+    Js[5] = ([[0]],)
     Js[6] = ()
+
+    # TODO: the above example of index scheme is still not passed, it works not well with the earlier broadcasting api, so that the superblock/superfiber query functions need to be debugged. Also, the updating of the index sets also needs to be debugged.
+
+    # Is[0] = ()
+    # Is[1] = ([[2], [0]],)                                       # (2, ...) and (0, ...)
+    # Is[2] = ([[2], [2]], [[0], [1]])                            # (2, 0, ...) and (2, 1, ...)
+    # Is[3] = ([[2], [2]], [[0], [1]], [[3], [4]])                # (2, 0, 3, ...) and (2, 1, 4, ...)
+    # Is[4] = ([[2], [2]], [[0], [1]], [[3], [4]], [[0], [5]])    # (2, 0, 3, 0, ...) and (2, 1, 4, 5, ...)
+
+    # Js[0] = None
+    # Js[1] = None
+    # Js[2] = ([[1, 2]], [[2, 0]], [[3, 3]], [[1, 1]])            # (..., 1, 2, 3, 1) and (..., 2, 0, 3, 1)
+    # Js[3] = ([[2, 0]], [[3, 3]], [[1, 1]])                      # (..., 2, 3, 1) and (..., 0, 3, 1)
+    # Js[4] = ([[3, 4]], [[1, 1]])                                # (..., 3, 1) and (..., 4, 1)
+    # Js[5] = ([[1, 4, 5]],)                                      # (..., 1) and (..., 4) and (..., 5)
+    # Js[6] = ()
 
     ### EXAMPLE ###
     # fmt: on
     # """
 
-    while True:
+    changed = True
+    while changed:
+        changed = False
+
         # left-to-right sweep
         for k in eqrange(1, dimension - 1):
             # find a new pivot
@@ -214,24 +323,87 @@ def tensor_cross_interpolation(
                 f"k = {k}, supercore approximation: {list(supercore_approximation.size())}"
             )
 
-            ## apply cross interpolation to the supercore
-            ...
+            # apply cross interpolation to the supercore
+            error_tensor = supercore - supercore_approximation
+            a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
 
-            # update Is[k], Js[k]
-            ...
+            # update Is[k], Js[k+1]
+            if ep.abs() > error_threshold:
+                for m in range(k - 1):
+                    Is[k][m].append([Is[k - 1][m][a_star][0]])
+                Is[k][k - 1].append([i_star])
 
-        break
+                Js[k + 1][0].append(j_star)
+                for m in range(len(Js[k + 2])):
+                    Js[k + 1][m + 1].append(Js[k + 2][m][b_star])
+
+                changed = True
 
         # right-to-left sweep
         for k in reversed(range(1, dimension)):
             # find a new pivot
-            ...
+            ## form the supercore
 
-            # update Is[k], Js[k]
-            ...
+            supercore = query_tensor_superblock(
+                Is=Is[k - 1],
+                Js=Js[k + 2],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
+            print(f"k = {k} (rtl), supercore: {list(supercore.size())}")
+            # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
 
-        # check convergence
-        ...
+            ## form the supercore approximation using current Is, Js
+
+            supercore_approximation_left = query_tensor_superfiber(
+                Is[k - 1],
+                Js[k + 1],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
+            # r_{k - 1} * n_k * r_{k + 1}
+
+            supercore_approximation_middle = query_tensor_element_batched(
+                Is[k] + Js[k + 1]
+            )
+            # r_{k} * r_{k + 1}
+
+            supercore_approximation_right = query_tensor_superfiber(
+                Is[k],
+                Js[k + 2],
+                query_tensor_element=query_tensor_element,
+                query_tensor_element_batched=query_tensor_element_batched,
+            )
+            # r_{k} * n_{k + 1} * r_{k + 2}
+
+            supercore_approximation = torch.einsum(
+                "apc,cb,bqd->apqd",
+                supercore_approximation_left,
+                torch.linalg.pinv(supercore_approximation_middle),
+                supercore_approximation_right,
+            )
+
+            print(
+                f"k = {k} (rtl), supercore approximation: {list(supercore_approximation.size())}"
+            )
+
+            # apply cross interpolation to the supercore
+            error_tensor = supercore - supercore_approximation
+            a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
+
+            # update Is[k], Js[k+1]
+            if ep.abs() > error_threshold:
+                for m in range(k - 1):
+                    Is[k][m].append([Is[k - 1][m][a_star][0]])
+                Is[k][k - 1].append([i_star])
+
+                Js[k + 1][0].append(j_star)
+                for m in range(len(Js[k + 2])):
+                    Js[k + 1][m + 1].append(Js[k + 2][m][b_star])
+
+                changed = True
+
+    return Is, Js
 
 
 def test_take_superblock():
