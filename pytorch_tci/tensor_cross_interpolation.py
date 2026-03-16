@@ -1,3 +1,4 @@
+import os
 import torch
 
 from typing import Callable, Optional
@@ -222,36 +223,45 @@ def tensor_cross_interpolation(
     ## Is[k] is one MultiIndex with length k
     ## Js[k] is one MultiIndex with length dimension - k + 1
 
-    Is = [()] + [tuple([[0]] for _ in range(k)) for k in eqrange(1, dimension - 1)]
-    #    I_0     I_1, ..., I_{d-1}
-    #   Is[0]   Is[1]      Is[d-1]
-    Js = (
-        [None, None]
-        + [tuple([[0]] for _ in range(k)) for k in eqrange(2, dimension)]
-        + [()]
-    )
-    #                    J_2, ..., J_d                                            J_{d+1}
-    #                   Js[2]      Js[d]                                          Js[d+1]
+    # Is = [()] + [tuple([[0]] for _ in range(k)) for k in eqrange(1, dimension - 1)]
+    #  I_0     I_1  ...  I_{d-1}
+    # Is[0]   Is[1] ...  Is[d-1]
+    Is = [None] * dimension
+    Is[0] = ()
+    for k in eqrange(1, dimension - 1):
+        Is[k] = tuple([[0]] for _ in range(k))
+    Is = tuple(Is)
+
+    # Js = (
+    #     [None, None]
+    #     + [tuple([[0]] for _ in range(k)) for k in eqrange(2, dimension)]
+    #     + [()]
+    # )
+    #  J_2   ...  J_d    J_{d+1}
+    # Js[2]      Js[d]   Js[d+1]
+    Js = [None] * (dimension + 2)
+    for k in eqrange(2, dimension):
+        Js[k] = tuple([[0]] for _ in range(dimension - k + 1))
+    Js[-1] = ()
+    Js = tuple(Js)
 
     # """
     # fmt: off
     ### EXAMPLE ###
 
-    Is[0] = ()
-    Is[1] = ([[0]],)
-    Is[2] = ([[0]], [[0]],)
-    Is[3] = ([[0]], [[0]], [[0]],)
-    Is[4] = ([[0]], [[0]], [[0]], [[0]],)
+    # Is[0] = ()
+    # Is[1] = ([[0]],)
+    # Is[2] = ([[0]], [[0]],)
+    # Is[3] = ([[0]], [[0]], [[0]],)
+    # Is[4] = ([[0]], [[0]], [[0]], [[0]],)
 
-    Js[0] = None
-    Js[1] = None
-    Js[2] = ([[0, 0, 0, 0]],)
-    Js[3] = ([[0, 0, 0]],)
-    Js[4] = ([[0, 0]],)
-    Js[5] = ([[0]],)
-    Js[6] = ()
-
-    # TODO: the above example of index scheme is still not passed, it works not well with the earlier broadcasting api, so that the superblock/superfiber query functions need to be debugged. Also, the updating of the index sets also needs to be debugged.
+    # Js[0] = None
+    # Js[1] = None
+    # Js[2] = ([[0]], [[0]], [[0]], [[0]],)
+    # Js[3] = ([[0]], [[0]], [[0]],)
+    # Js[4] = ([[0]], [[0]],)
+    # Js[5] = ([[0]],)
+    # Js[6] = ()
 
     # Is[0] = ()
     # Is[1] = ([[2], [0]],)                                       # (2, ...) and (0, ...)
@@ -319,25 +329,21 @@ def tensor_cross_interpolation(
                 supercore_approximation_right,
             )
 
-            print(
-                f"k = {k}, supercore approximation: {list(supercore_approximation.size())}"
-            )
-
             # apply cross interpolation to the supercore
             error_tensor = supercore - supercore_approximation
             a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
 
             # update Is[k], Js[k+1]
             if ep.abs() > error_threshold:
+                changed = True
+
                 for m in range(k - 1):
                     Is[k][m].append([Is[k - 1][m][a_star][0]])
                 Is[k][k - 1].append([i_star])
 
-                Js[k + 1][0].append(j_star)
-                for m in range(len(Js[k + 2])):
-                    Js[k + 1][m + 1].append(Js[k + 2][m][b_star])
-
-                changed = True
+                Js[k + 1][0][0].append(j_star)
+                for m in range(dimension - k - 1):
+                    Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
 
         # right-to-left sweep
         for k in reversed(range(1, dimension)):
@@ -383,98 +389,61 @@ def tensor_cross_interpolation(
                 supercore_approximation_right,
             )
 
-            print(
-                f"k = {k} (rtl), supercore approximation: {list(supercore_approximation.size())}"
-            )
-
             # apply cross interpolation to the supercore
             error_tensor = supercore - supercore_approximation
             a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
 
             # update Is[k], Js[k+1]
             if ep.abs() > error_threshold:
+                changed = True
+
                 for m in range(k - 1):
                     Is[k][m].append([Is[k - 1][m][a_star][0]])
                 Is[k][k - 1].append([i_star])
 
-                Js[k + 1][0].append(j_star)
-                for m in range(len(Js[k + 2])):
-                    Js[k + 1][m + 1].append(Js[k + 2][m][b_star])
+                Js[k + 1][0][0].append(j_star)
+                for m in range(dimension - k - 1):
+                    Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
 
-                changed = True
+    # TODO: debug the statistics, merge the left-to-right and right-to-left sweeps, then test and correctness.
+    # # statistics
+    # rank = [1] + [len(Is[k][0]) for k in eqrange(1, dimension - 1)] + [1]
+    # original_params = 1
+    # for s in size:
+    #     original_params *= s
+
+    # kept_params = sum(rank[k] * size[k] * rank[k + 1] for k in range(dimension))
+    # # kept_params += sum(rank[k] * rank[k] for k in range(1, dimension))
+
+    # print("=" * 50)
+    # print("TCI Statistics " + "-" * 35)
+    # print(f"               Size: {list(size)}")
+    # print(f"               Rank: {rank}")
+    # print(f"   Parameter before: {original_params}")
+    # print(f"   Parameter  after: {kept_params}")
+    # print(f"  Compression ratio: {kept_params / original_params:.4%}")
+    # print("=" * 50)
 
     return Is, Js
 
 
-def test_take_superblock():
-    tensor = torch.randn(5, 6, 7, 8, 9)
-
-    Is2 = ([2, 2], [0, 1])  # (2, 0, ...) and (2, 1, ...)
-    Js5 = ([1, 4, 5],)  # (..., 1) and (..., 4) and (..., 5)
-
-    ### 1
-    superblock1 = torch.zeros((2, 7, 8, 3), dtype=tensor.dtype)
-    for l in range(2):
-        for i in range(7):
-            for j in range(8):
-                for r in range(3):
-                    mi = (Is2[0][l], Is2[1][l], i, j, Js5[0][r])
-                    superblock1[l, i, j, r] = tensor[mi]
-
-    ### 2
-    superblock2 = tensor[*Is2][..., *Js5]
-
-    ### 3
-    left = [[[2], [2]], [[0], [1]]]
-    right = [[[1, 4, 5]]]
-
-    superblock3 = tensor[tuple(left + [slice(None), slice(None)] + right)]
-    superblock3 = superblock3.permute(0, 2, 3, 1)
-    # this always produce 4d tensor with the dims from Is and Js being moved to the 1st and 2nd dims
-
-    print(torch.allclose(superblock1, superblock2))
-    print(torch.allclose(superblock1, superblock3))
-
-    print(superblock1.size())
-
-
-def test_take_fiber():
-    tensor = torch.randn(5, 6, 7, 8, 9)
-
-    Is2 = ([2, 2], [0, 1])  # (2, 0, ...) and (2, 1, ...)
-    Js4 = (
-        [2, 3, 3],
-        [1, 4, 5],
-    )  # (..., 2, 1) and (..., 3, 4) and (..., 3, 5)
-
-    ### 1
-    fiber1 = torch.zeros((2, 7, 3), dtype=tensor.dtype)
-    for l in range(2):
-        for i in range(7):
-            for r in range(3):
-                mi = (Is2[0][l], Is2[1][l], i, Js4[0][r], Js4[1][r])
-                fiber1[l, i, r] = tensor[mi]
-
-    ### 2
-    fiber2 = tensor[*Is2][..., *Js4]
-
-    ### 3
-    left = [[[2], [2]], [[0], [1]]]
-    right = [[[2, 3, 3]], [[1, 4, 5]]]
-
-    fiber3 = tensor[tuple(left + [slice(None)] + right)]
-
-    fiber3 = fiber3.permute(0, 2, 1)
-
-    print(torch.allclose(fiber1, fiber2))
-    print(torch.allclose(fiber1, fiber3))
-
-    print(fiber1.size())
-
-
 if __name__ == "__main__":
-    tensor = torch.randn(5, 6, 7, 8, 9)
-    tci = tensor_cross_interpolation(tensor=tensor, method="rook")
+    dimension = 5
+    size = (5, 6, 7, 8, 9)
+    rank = (2, 2, 3, 4, 4)
 
-    # test_take_fiber()
-    # test_take_superblock()
+    Us = [torch.randn(rank[i], size[i]) for i in range(dimension)]
+    core = torch.randn(rank)
+    tensor = torch.einsum(
+        "abcde,ai,bj,ck,dl,em->ijklm",
+        core,
+        Us[0],
+        Us[1],
+        Us[2],
+        Us[3],
+        Us[4],
+    )
+
+    Is, Js = tensor_cross_interpolation(
+        tensor=tensor, method="rook", error_threshold=1e-3
+    )
