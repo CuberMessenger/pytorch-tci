@@ -3,6 +3,7 @@ import torch
 
 from typing import Callable, Optional
 from enum import Enum, auto
+from itertools import chain
 
 MultiIndex = tuple[int | slice, ...]
 BatchedMultiIndex = tuple[list[list[int]] | slice, ...]
@@ -180,6 +181,74 @@ def rook_search(
     return a_star, i_star, j_star, b_star, ep
 
 
+def sweep_one(
+    k,
+    Is,
+    Js,
+    query_tensor_element,
+    query_tensor_element_batched,
+    searcher,
+    error_threshold,
+):
+    # find a new pivot
+    ## form the supercore
+    changed = False
+    supercore = query_tensor_superblock(
+        Is=Is[k - 1],
+        Js=Js[k + 2],
+        query_tensor_element=query_tensor_element,
+        query_tensor_element_batched=query_tensor_element_batched,
+    )
+    print(f"k = {k}, supercore: {list(supercore.size())}")
+    # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
+
+    ## form the supercore approximation using current Is, Js
+
+    supercore_approximation_left = query_tensor_superfiber(
+        Is[k - 1],
+        Js[k + 1],
+        query_tensor_element=query_tensor_element,
+        query_tensor_element_batched=query_tensor_element_batched,
+    )
+    # r_{k - 1} * n_k * r_{k + 1}
+
+    supercore_approximation_middle = query_tensor_element_batched(Is[k] + Js[k + 1])
+    # r_{k} * r_{k + 1}
+
+    supercore_approximation_right = query_tensor_superfiber(
+        Is[k],
+        Js[k + 2],
+        query_tensor_element=query_tensor_element,
+        query_tensor_element_batched=query_tensor_element_batched,
+    )
+    # r_{k} * n_{k + 1} * r_{k + 2}
+
+    supercore_approximation = torch.einsum(
+        "apc,cb,bqd->apqd",
+        supercore_approximation_left,
+        torch.linalg.pinv(supercore_approximation_middle),
+        supercore_approximation_right,
+    )
+
+    # apply cross interpolation to the supercore
+    error_tensor = supercore - supercore_approximation
+    a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
+
+    # update Is[k], Js[k+1]
+    if ep.abs() > error_threshold:
+        changed = True
+
+        for m in range(k - 1):
+            Is[k][m].append([Is[k - 1][m][a_star][0]])
+        Is[k][k - 1].append([i_star])
+
+        Js[k + 1][0][0].append(j_star)
+        for m in range(dimension - k - 1):
+            Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
+
+    return changed
+
+
 def tensor_cross_interpolation(
     query_tensor_element: Optional[Callable[[MultiIndex], torch.Tensor]] = None,
     query_tensor_element_batched: Optional[
@@ -223,7 +292,6 @@ def tensor_cross_interpolation(
     ## Is[k] is one MultiIndex with length k
     ## Js[k] is one MultiIndex with length dimension - k + 1
 
-    # Is = [()] + [tuple([[0]] for _ in range(k)) for k in eqrange(1, dimension - 1)]
     #  I_0     I_1  ...  I_{d-1}
     # Is[0]   Is[1] ...  Is[d-1]
     Is = [None] * dimension
@@ -232,11 +300,6 @@ def tensor_cross_interpolation(
         Is[k] = tuple([[0]] for _ in range(k))
     Is = tuple(Is)
 
-    # Js = (
-    #     [None, None]
-    #     + [tuple([[0]] for _ in range(k)) for k in eqrange(2, dimension)]
-    #     + [()]
-    # )
     #  J_2   ...  J_d    J_{d+1}
     # Js[2]      Js[d]   Js[d+1]
     Js = [None] * (dimension + 2)
@@ -263,6 +326,8 @@ def tensor_cross_interpolation(
     # Js[5] = ([[0]],)
     # Js[6] = ()
 
+    # ----
+
     # Is[0] = ()
     # Is[1] = ([[2], [0]],)                                       # (2, ...) and (0, ...)
     # Is[2] = ([[2], [2]], [[0], [1]])                            # (2, 0, ...) and (2, 1, ...)
@@ -285,144 +350,111 @@ def tensor_cross_interpolation(
     while changed:
         changed = False
 
-        # left-to-right sweep
-        for k in eqrange(1, dimension - 1):
-            # find a new pivot
-            ## form the supercore
-
-            supercore = query_tensor_superblock(
-                Is=Is[k - 1],
-                Js=Js[k + 2],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            print(f"k = {k}, supercore: {list(supercore.size())}")
-            # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
-
-            ## form the supercore approximation using current Is, Js
-
-            supercore_approximation_left = query_tensor_superfiber(
-                Is[k - 1],
-                Js[k + 1],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            # r_{k - 1} * n_k * r_{k + 1}
-
-            supercore_approximation_middle = query_tensor_element_batched(
-                Is[k] + Js[k + 1]
-            )
-            # r_{k} * r_{k + 1}
-
-            supercore_approximation_right = query_tensor_superfiber(
-                Is[k],
-                Js[k + 2],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            # r_{k} * n_{k + 1} * r_{k + 2}
-
-            supercore_approximation = torch.einsum(
-                "apc,cb,bqd->apqd",
-                supercore_approximation_left,
-                torch.linalg.pinv(supercore_approximation_middle),
-                supercore_approximation_right,
+        # left-to-right sweep then right-to-left sweep
+        for k in chain(eqrange(1, dimension - 1), reversed(range(1, dimension - 1))):
+            changed |= sweep_one(
+                k,
+                Is,
+                Js,
+                query_tensor_element,
+                query_tensor_element_batched,
+                searcher,
+                error_threshold,
             )
 
-            # apply cross interpolation to the supercore
-            error_tensor = supercore - supercore_approximation
-            a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
+    cores = []
 
-            # update Is[k], Js[k+1]
-            if ep.abs() > error_threshold:
-                changed = True
+    for k in eqrange(1, dimension - 1):
+        core_left = query_tensor_superfiber(
+            Is[k - 1],
+            Js[k + 1],
+            query_tensor_element=query_tensor_element,
+            query_tensor_element_batched=query_tensor_element_batched,
+        )  # (r_{k-1}, n_k, r_{k+1})
 
-                for m in range(k - 1):
-                    Is[k][m].append([Is[k - 1][m][a_star][0]])
-                Is[k][k - 1].append([i_star])
+        core_right = torch.linalg.pinv(
+            query_tensor_element_batched(Is[k] + Js[k + 1])
+        )  # (r_k, r_{k+1})
 
-                Js[k + 1][0][0].append(j_star)
-                for m in range(dimension - k - 1):
-                    Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
+        core = torch.einsum(
+            "apc,cb->apb",
+            core_left,
+            core_right,
+        )  # (r_{k-1}, n_k, r_{k+1}) * (r_{k+1}, r_k) -> (r_{k-1}, n_k, r_k)
 
-        # right-to-left sweep
-        for k in reversed(range(1, dimension)):
-            # find a new pivot
-            ## form the supercore
+        print(f"core {k}: {list(core.size())}")
 
-            supercore = query_tensor_superblock(
-                Is=Is[k - 1],
-                Js=Js[k + 2],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            print(f"k = {k} (rtl), supercore: {list(supercore.size())}")
-            # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
+        cores.append(core)
 
-            ## form the supercore approximation using current Is, Js
+    last_core = query_tensor_superfiber(
+        Is[dimension - 1],
+        Js[dimension + 1],
+        query_tensor_element=query_tensor_element,
+        query_tensor_element_batched=query_tensor_element_batched,
+    )  # (r_{d-2}, n_{d-1}, 1)
 
-            supercore_approximation_left = query_tensor_superfiber(
-                Is[k - 1],
-                Js[k + 1],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            # r_{k - 1} * n_k * r_{k + 1}
+    print(f"core {dimension}: {list(last_core.size())}")
+    cores.append(last_core)
 
-            supercore_approximation_middle = query_tensor_element_batched(
-                Is[k] + Js[k + 1]
-            )
-            # r_{k} * r_{k + 1}
+    def query_interpolation_element(I: MultiIndex) -> torch.Tensor:
+        # element = torch.linalg.multi_dot(
+        #     [core[:, index, :] for core, index in zip(cores, I)]
+        # ).squeeze()
+        # return element
 
-            supercore_approximation_right = query_tensor_superfiber(
-                Is[k],
-                Js[k + 2],
-                query_tensor_element=query_tensor_element,
-                query_tensor_element_batched=query_tensor_element_batched,
-            )
-            # r_{k} * n_{k + 1} * r_{k + 2}
+        sliced_cores = [core[:, idx, :] for core, idx in zip(cores, I)]
+        result = sliced_cores[0]
+        for next_core in sliced_cores[1:]:
+            # result: (..., r_k)
+            #               [-1]
+            # next_core: (r_k, ...)
+            #             [0]
+            result = torch.tensordot(result, next_core, dims=([-1], [0]))
 
-            supercore_approximation = torch.einsum(
-                "apc,cb,bqd->apqd",
-                supercore_approximation_left,
-                torch.linalg.pinv(supercore_approximation_middle),
-                supercore_approximation_right,
-            )
+        return result.squeeze()
+    
+    def query_interpolation_tensor() -> torch.Tensor:
+        mi = tuple(slice(None) for _ in range(dimension))
+        return query_interpolation_element(mi)
 
-            # apply cross interpolation to the supercore
-            error_tensor = supercore - supercore_approximation
-            a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
+    mi = (1, 2, 3, 4, 5)
+    print(f"query_interpolation_element({mi}): {query_interpolation_element(mi)}")
+    print(f"query_tensor_element({mi}): {query_tensor_element(mi)}")
 
-            # update Is[k], Js[k+1]
-            if ep.abs() > error_threshold:
-                changed = True
+    mi = (slice(None), 2, 3, slice(None), 5)
+    interpolated = query_interpolation_element(mi)
+    original = query_tensor_element(mi)
+    print(f"query_interpolation_element({mi}): {interpolated.size()}")
+    print(f"query_tensor_element({mi}): {original.size()}")
+    abs_error = (interpolated - original).abs().max()
+    print(f"max absolute error: {abs_error.item()}")
 
-                for m in range(k - 1):
-                    Is[k][m].append([Is[k - 1][m][a_star][0]])
-                Is[k][k - 1].append([i_star])
+    interpolated_tensor = query_interpolation_tensor()
+    original_tensor = query_tensor()
+    print(f"query_interpolation_tensor(): {interpolated_tensor.size()}")
+    print(f"query_tensor(): {original_tensor.size()}")
+    tensor_abs_error = (interpolated_tensor - original_tensor).abs().max()
+    print(f"max absolute error: {tensor_abs_error.item()}")
 
-                Js[k + 1][0][0].append(j_star)
-                for m in range(dimension - k - 1):
-                    Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
+    # statistics
+    rank = [1] + [len(Is[k][0]) for k in eqrange(1, dimension - 1)] + [1]
+    original_params = 1
+    for s in size:
+        original_params *= s
 
-    # TODO: debug the statistics, merge the left-to-right and right-to-left sweeps, then test and correctness.
-    # # statistics
-    # rank = [1] + [len(Is[k][0]) for k in eqrange(1, dimension - 1)] + [1]
-    # original_params = 1
-    # for s in size:
-    #     original_params *= s
+    kept_params = 0
+    for core in cores:
+        kept_params += core.size(0) * core.size(1) * core.size(2)
 
-    # kept_params = sum(rank[k] * size[k] * rank[k + 1] for k in range(dimension))
-    # # kept_params += sum(rank[k] * rank[k] for k in range(1, dimension))
-
-    # print("=" * 50)
-    # print("TCI Statistics " + "-" * 35)
-    # print(f"               Size: {list(size)}")
-    # print(f"               Rank: {rank}")
-    # print(f"   Parameter before: {original_params}")
-    # print(f"   Parameter  after: {kept_params}")
-    # print(f"  Compression ratio: {kept_params / original_params:.4%}")
-    # print("=" * 50)
+    print("=" * 50)
+    print("TCI Statistics " + "-" * 35)
+    print(f"               Size: {list(size)}")
+    print(f"               Rank: {rank}")
+    print(f"   Parameter before: {original_params}")
+    print(f"   Parameter  after: {kept_params}")
+    print(f"  Compression ratio: {kept_params / original_params:.4%}")
+    print(f" Max absolute error: {tensor_abs_error.item()}")
+    print("=" * 50)
 
     return Is, Js
 
