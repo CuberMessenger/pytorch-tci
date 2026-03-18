@@ -183,6 +183,7 @@ def rook_search(
 
 def sweep_one(
     k,
+    dimension,
     Is,
     Js,
     query_tensor_element,
@@ -233,7 +234,9 @@ def sweep_one(
     # apply cross interpolation to the supercore
     error_tensor = supercore - supercore_approximation
     a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
-    print(f"k = {k}, found pivot: (a*, i*, j*, b*) = ({a_star}, {i_star}, {j_star}, {b_star}), error = {ep.item()}")
+    # print(
+    #     f"k = {k}, found pivot: (a*, i*, j*, b*) = ({a_star}, {i_star}, {j_star}, {b_star}), error = {ep.item()}"
+    # )
 
     # update Is[k], Js[k+1]
     if ep.abs() > error_threshold:
@@ -260,7 +263,13 @@ def tensor_cross_interpolation(
     tensor: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
-):
+) -> tuple[
+    tuple[MultiIndex, ...],
+    tuple[MultiIndex, ...],
+    list[torch.Tensor],
+    Callable[[MultiIndex], torch.Tensor],
+    Callable[[], torch.Tensor],
+]:
     if tensor is not None:
         query_tensor_element = lambda I_a: tensor[I_a]
         query_tensor_element_batched = lambda I_a: tensor[I_a]
@@ -355,6 +364,7 @@ def tensor_cross_interpolation(
         for k in chain(eqrange(1, dimension - 1), reversed(range(1, dimension - 1))):
             changed |= sweep_one(
                 k,
+                dimension,
                 Is,
                 Js,
                 query_tensor_element,
@@ -383,7 +393,7 @@ def tensor_cross_interpolation(
             core_right,
         )  # (r_{k-1}, n_k, r_{k+1}) * (r_{k+1}, r_k) -> (r_{k-1}, n_k, r_k)
 
-        print(f"core {k}: {list(core.size())}")
+        # print(f"core {k}: {list(core.size())}")
 
         cores.append(core)
 
@@ -394,7 +404,7 @@ def tensor_cross_interpolation(
         query_tensor_element_batched=query_tensor_element_batched,
     )  # (r_{d-2}, n_{d-1}, 1)
 
-    print(f"core {dimension}: {list(last_core.size())}")
+    # print(f"core {dimension}: {list(last_core.size())}")
     cores.append(last_core)
 
     def query_interpolation_element(I: MultiIndex) -> torch.Tensor:
@@ -413,57 +423,18 @@ def tensor_cross_interpolation(
             result = torch.tensordot(result, next_core, dims=([-1], [0]))
 
         return result.squeeze()
-    
+
     def query_interpolation_tensor() -> torch.Tensor:
         mi = tuple(slice(None) for _ in range(dimension))
         return query_interpolation_element(mi)
 
-    mi = (1, 2, 3, 4, 5)
-    print(f"query_interpolation_element({mi}): {query_interpolation_element(mi)}")
-    print(f"query_tensor_element({mi}): {query_tensor_element(mi)}")
-
-    mi = (slice(None), 2, 3, slice(None), 5)
-    interpolated = query_interpolation_element(mi)
-    original = query_tensor_element(mi)
-    print(f"query_interpolation_element({mi}): {interpolated.size()}")
-    print(f"query_tensor_element({mi}): {original.size()}")
-    abs_error = (interpolated - original).abs().max()
-    print(f"max absolute error: {abs_error.item()}")
-
-    interpolated_tensor = query_interpolation_tensor()
-    original_tensor = query_tensor()
-    print(f"query_interpolation_tensor(): {interpolated_tensor.size()}")
-    print(f"query_tensor(): {original_tensor.size()}")
-    tensor_abs_error = (interpolated_tensor - original_tensor).abs().max()
-    print(f"max absolute error: {tensor_abs_error.item()}")
-
-    # statistics
-    rank = [1] + [len(Is[k][0]) for k in eqrange(1, dimension - 1)] + [1]
-    original_params = 1
-    for s in size:
-        original_params *= s
-
-    kept_params = 0
-    for core in cores:
-        kept_params += core.size(0) * core.size(1) * core.size(2)
-
-    print("=" * 50)
-    print("TCI Statistics " + "-" * 35)
-    print(f"               Size: {list(size)}")
-    print(f"               Rank: {rank}")
-    print(f"   Parameter before: {original_params}")
-    print(f"   Parameter  after: {kept_params}")
-    print(f"  Compression ratio: {kept_params / original_params:.4%}")
-    print(f" Max absolute error: {tensor_abs_error.item()}")
-    print("=" * 50)
-
-    return Is, Js
+    return Is, Js, cores, query_interpolation_element, query_interpolation_tensor
 
 
 if __name__ == "__main__":
     dimension = 5
-    size = (50, 6, 7, 8, 9)
-    rank = (20, 2, 3, 4, 4)
+    size = (5, 6, 7, 8, 9)
+    rank = (2, 2, 7, 4, 4)
 
     Us = [torch.randn(rank[i], size[i]) for i in range(dimension)]
     core = torch.randn(rank)
@@ -479,6 +450,6 @@ if __name__ == "__main__":
 
     tensor = tensor.cuda()
 
-    Is, Js = tensor_cross_interpolation(
+    tensor_cross_interpolation(
         tensor=tensor, method="rook", error_threshold=1e-3
     )
