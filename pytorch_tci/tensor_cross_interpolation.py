@@ -234,9 +234,9 @@ def sweep_one(
     # apply cross interpolation to the supercore
     error_tensor = supercore - supercore_approximation
     a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
-    # print(
-    #     f"k = {k}, found pivot: (a*, i*, j*, b*) = ({a_star}, {i_star}, {j_star}, {b_star}), error = {ep.item()}"
-    # )
+    print(
+        f"k = {k}, found pivot: (a*, i*, j*, b*) = ({a_star}, {i_star}, {j_star}, {b_star}), error = {ep.item()}"
+    )
 
     # update Is[k], Js[k+1]
     if ep.abs() > error_threshold:
@@ -393,7 +393,7 @@ def tensor_cross_interpolation(
             core_right,
         )  # (r_{k-1}, n_k, r_{k+1}) * (r_{k+1}, r_k) -> (r_{k-1}, n_k, r_k)
 
-        # print(f"core {k}: {list(core.size())}")
+        print(f"core {k}: {list(core.size())}")
 
         cores.append(core)
 
@@ -404,7 +404,7 @@ def tensor_cross_interpolation(
         query_tensor_element_batched=query_tensor_element_batched,
     )  # (r_{d-2}, n_{d-1}, 1)
 
-    # print(f"core {dimension}: {list(last_core.size())}")
+    print(f"core {dimension}: {list(last_core.size())}")
     cores.append(last_core)
 
     def query_interpolation_element(I: MultiIndex) -> torch.Tensor:

@@ -15,7 +15,7 @@ def prepare_random_matrix(N, r):
 
 def prepare_asymptotically_smooth_matrix(num_points, dim) -> torch.Tensor:
     """
-    Prepares two well-separated clusters of points in 3D space to satisfy
+    Prepares two well-separated clusters of points in dim-D space to satisfy
     the geometrical condition for asymptotically smooth functions.
     """
     # Cluster X centered around the origin point
