@@ -4,6 +4,7 @@ import torch
 from typing import Callable, Optional
 from enum import Enum, auto
 from itertools import chain
+from pytorch_tci.utility import compute_relative_error, compute_absolute_error
 
 MultiIndex = tuple[int | slice, ...]
 BatchedMultiIndex = tuple[list[list[int]] | slice, ...]
@@ -90,6 +91,29 @@ def query_tensor_superblock(
         # (batch_I, free_dim1, free_dim2, batch_J)
 
     return superblock
+
+
+def query_interpolation_element(I: MultiIndex, cores) -> torch.Tensor:
+    # element = torch.linalg.multi_dot(
+    #     [core[:, index, :] for core, index in zip(cores, I)]
+    # ).squeeze()
+    # return element
+
+    sliced_cores = [core[:, idx, :] for core, idx in zip(cores, I)]
+    result = sliced_cores[0]
+    for next_core in sliced_cores[1:]:
+        # result: (..., r_k)
+        #               [-1]
+        # next_core: (r_k, ...)
+        #             [0]
+        result = torch.tensordot(result, next_core, dims=([-1], [0]))
+
+    return result.squeeze()
+
+
+def query_interpolation_tensor(cores) -> torch.Tensor:
+    mi = tuple(slice(None) for _ in range(len(cores)))
+    return query_interpolation_element(mi, cores)
 
 
 class RookCondition(Enum):
@@ -190,22 +214,23 @@ def sweep_one(
     query_tensor_element_batched,
     searcher,
     error_threshold,
+    debug,
 ):
     # find a new pivot
-    ## form the supercore
+    ## form the superblock
     changed = False
-    supercore = query_tensor_superblock(
+    superblock = query_tensor_superblock(
         Is=Is[k - 1],
         Js=Js[k + 2],
         query_tensor_element=query_tensor_element,
         query_tensor_element_batched=query_tensor_element_batched,
     )
-    # print(f"k = {k}, supercore: {list(supercore.size())}")
+    # print(f"k = {k}, superblock: {list(superblock.size())}")
     # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
 
-    ## form the supercore approximation using current Is, Js
+    ## form the superblock approximation using current Is, Js
 
-    supercore_approximation_left = query_tensor_superfiber(
+    superblock_approximation_left = query_tensor_superfiber(
         Is[k - 1],
         Js[k + 1],
         query_tensor_element=query_tensor_element,
@@ -213,10 +238,10 @@ def sweep_one(
     )
     # r_{k - 1} * n_k * r_{k + 1}
 
-    supercore_approximation_middle = query_tensor_element_batched(Is[k] + Js[k + 1])
+    superblock_approximation_middle = query_tensor_element_batched(Is[k] + Js[k + 1])
     # r_{k} * r_{k + 1}
 
-    supercore_approximation_right = query_tensor_superfiber(
+    superblock_approximation_right = query_tensor_superfiber(
         Is[k],
         Js[k + 2],
         query_tensor_element=query_tensor_element,
@@ -224,19 +249,16 @@ def sweep_one(
     )
     # r_{k} * n_{k + 1} * r_{k + 2}
 
-    supercore_approximation = torch.einsum(
+    superblock_approximation = torch.einsum(
         "apc,cb,bqd->apqd",
-        supercore_approximation_left,
-        torch.linalg.pinv(supercore_approximation_middle),
-        supercore_approximation_right,
+        superblock_approximation_left,
+        torch.linalg.pinv(superblock_approximation_middle),
+        superblock_approximation_right,
     )
 
-    # apply cross interpolation to the supercore
-    error_tensor = supercore - supercore_approximation
+    # apply cross interpolation to the superblock
+    error_tensor = superblock - superblock_approximation
     a_star, i_star, j_star, b_star, ep = searcher((error_tensor,))
-    print(
-        f"k = {k}, found pivot: (a*, i*, j*, b*) = ({a_star}, {i_star}, {j_star}, {b_star}), error = {ep.item()}"
-    )
 
     # update Is[k], Js[k+1]
     if ep.abs() > error_threshold:
@@ -250,7 +272,44 @@ def sweep_one(
         for m in range(dimension - k - 1):
             Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
 
-    return changed
+    return changed, a_star, i_star, j_star, b_star, ep
+
+
+def construct_cores(
+    Is, Js, dimension, query_tensor_element, query_tensor_element_batched
+):
+    cores = []
+
+    for k in eqrange(1, dimension - 1):
+        core_left = query_tensor_superfiber(
+            Is[k - 1],
+            Js[k + 1],
+            query_tensor_element=query_tensor_element,
+            query_tensor_element_batched=query_tensor_element_batched,
+        )  # (r_{k-1}, n_k, r_{k+1})
+
+        core_right = torch.linalg.pinv(
+            query_tensor_element_batched(Is[k] + Js[k + 1])
+        )  # (r_k, r_{k+1})
+
+        core = torch.einsum(
+            "apc,cb->apb",
+            core_left,
+            core_right,
+        )  # (r_{k-1}, n_k, r_{k+1}) * (r_{k+1}, r_k) -> (r_{k-1}, n_k, r_k)
+
+        cores.append(core)
+
+    last_core = query_tensor_superfiber(
+        Is[dimension - 1],
+        Js[dimension + 1],
+        query_tensor_element=query_tensor_element,
+        query_tensor_element_batched=query_tensor_element_batched,
+    )  # (r_{d-2}, n_{d-1}, 1)
+
+    cores.append(last_core)
+
+    return cores
 
 
 def tensor_cross_interpolation(
@@ -263,6 +322,7 @@ def tensor_cross_interpolation(
     tensor: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
+    debug: bool = False,
 ) -> tuple[
     tuple[MultiIndex, ...],
     tuple[MultiIndex, ...],
@@ -356,13 +416,28 @@ def tensor_cross_interpolation(
     # fmt: on
     # """
 
+    logs = [
+        [
+            "iteration",
+            "k",
+            "max_rank",
+            "new_pivot",
+            "new_pivot_error",
+            "superblock (log every 100 iterations)",
+            "relative_error",
+            "absolute_error",
+            "compression_ratio",
+        ]
+    ]
+    iteration = 1
+    max_iteration = 200
     changed = True
-    while changed:
+    while changed and iteration <= max_iteration:
         changed = False
 
         # left-to-right sweep then right-to-left sweep
         for k in chain(eqrange(1, dimension - 1), reversed(range(1, dimension - 1))):
-            changed |= sweep_one(
+            is_changed, a_star, i_star, j_star, b_star, ep = sweep_one(
                 k,
                 dimension,
                 Is,
@@ -371,64 +446,93 @@ def tensor_cross_interpolation(
                 query_tensor_element_batched,
                 searcher,
                 error_threshold,
+                debug,
             )
 
-    cores = []
+            changed |= is_changed
 
-    for k in eqrange(1, dimension - 1):
-        core_left = query_tensor_superfiber(
-            Is[k - 1],
-            Js[k + 1],
-            query_tensor_element=query_tensor_element,
-            query_tensor_element_batched=query_tensor_element_batched,
-        )  # (r_{k-1}, n_k, r_{k+1})
+            if debug:
+                original_tensor = tensor
+                if original_tensor is None:
+                    tensor = query_tensor()
+                    original_tensor = tensor
 
-        core_right = torch.linalg.pinv(
-            query_tensor_element_batched(Is[k] + Js[k + 1])
-        )  # (r_k, r_{k+1})
+                cores = construct_cores(
+                    Is,
+                    Js,
+                    dimension,
+                    query_tensor_element,
+                    query_tensor_element_batched,
+                )
+                interpolation = query_interpolation_tensor(cores)
 
-        core = torch.einsum(
-            "apc,cb->apb",
-            core_left,
-            core_right,
-        )  # (r_{k-1}, n_k, r_{k+1}) * (r_{k+1}, r_k) -> (r_{k-1}, n_k, r_k)
+                rank = [1] + [len(Is[k][0]) for k in range(1, dimension)] + [1]
+                max_rank = max(rank)
 
-        print(f"core {k}: {list(core.size())}")
+                relative_error = compute_relative_error(original_tensor, interpolation)
+                absolute_error = compute_absolute_error(original_tensor, interpolation)
 
-        cores.append(core)
+                compression_ratio = 0
+                for core in cores:
+                    compression_ratio += torch.numel(core)
+                compression_ratio /= original_tensor.numel()
 
-    last_core = query_tensor_superfiber(
-        Is[dimension - 1],
-        Js[dimension + 1],
-        query_tensor_element=query_tensor_element,
-        query_tensor_element_batched=query_tensor_element_batched,
-    )  # (r_{d-2}, n_{d-1}, 1)
+                if iteration % 100 == 0:
+                    superblock = query_tensor_superblock(
+                        Is=Is[k - 1],
+                        Js=Js[k + 2],
+                        query_tensor_element=query_tensor_element,
+                        query_tensor_element_batched=query_tensor_element_batched,
+                    )
+                else:
+                    superblock = None
 
-    print(f"core {dimension}: {list(last_core.size())}")
-    cores.append(last_core)
+                print(
+                    (
+                        f"i={iteration},k={k},max_rank={max_rank},"
+                        f"new_pivot=({a_star}, {i_star}, {j_star}, {b_star}),"
+                        f"new_pivot_error={ep:.3e},"
+                        f"e_r={relative_error:.3%},"
+                        f"e_a={absolute_error:.3e},"
+                        f"CR={compression_ratio:.3%}"
+                    )
+                )
 
-    def query_interpolation_element(I: MultiIndex) -> torch.Tensor:
-        # element = torch.linalg.multi_dot(
-        #     [core[:, index, :] for core, index in zip(cores, I)]
-        # ).squeeze()
-        # return element
+                logs.append(
+                    [
+                        iteration,
+                        k,
+                        max_rank,
+                        (i_star, j_star),
+                        ep.abs().item(),
+                        superblock,
+                        relative_error,
+                        absolute_error,
+                        compression_ratio,
+                    ]
+                )
 
-        sliced_cores = [core[:, idx, :] for core, idx in zip(cores, I)]
-        result = sliced_cores[0]
-        for next_core in sliced_cores[1:]:
-            # result: (..., r_k)
-            #               [-1]
-            # next_core: (r_k, ...)
-            #             [0]
-            result = torch.tensordot(result, next_core, dims=([-1], [0]))
+            iteration += 1
 
-        return result.squeeze()
+    cores = construct_cores(
+        Is, Js, dimension, query_tensor_element, query_tensor_element_batched
+    )
+    if debug:
+        for k, core in enumerate(cores):
+            print(f"core {k} shape: {list(core.size())}")
 
-    def query_interpolation_tensor() -> torch.Tensor:
-        mi = tuple(slice(None) for _ in range(dimension))
-        return query_interpolation_element(mi)
+    output = (
+        Is,
+        Js,
+        cores,
+        lambda mi: query_interpolation_element(mi, cores),
+        lambda: query_interpolation_tensor(cores),
+    )
 
-    return Is, Js, cores, query_interpolation_element, query_interpolation_tensor
+    if debug:
+        output += (logs,)
+
+    return output
 
 
 if __name__ == "__main__":
@@ -450,6 +554,4 @@ if __name__ == "__main__":
 
     tensor = tensor.cuda()
 
-    tensor_cross_interpolation(
-        tensor=tensor, method="rook", error_threshold=1e-3
-    )
+    tensor_cross_interpolation(tensor=tensor, method="rook", error_threshold=1e-3)

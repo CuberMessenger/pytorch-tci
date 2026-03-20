@@ -1,52 +1,16 @@
 import tqdm
 import time
 import torch
+import matplotlib.pyplot as plot
 
 from pytorch_tci import cross_interpolation
 
-
-def compute_relative_error(A, A_tilde):
-    return (torch.norm(A - A_tilde) / torch.norm(A)).item()
-
-
-def prepare_random_matrix(N, r):
-    return torch.rand((N, r)) @ torch.rand((r, N))  # + torch.rand((N, N)) * 1e-2
-
-
-def prepare_asymptotically_smooth_matrix(num_points, dim) -> torch.Tensor:
-    """
-    Prepares two well-separated clusters of points in dim-D space to satisfy
-    the geometrical condition for asymptotically smooth functions.
-    """
-    # Cluster X centered around the origin point
-    X = torch.rand((num_points, dim))
-
-    # Cluster Y centered around a distant point to ensure separation
-    # This separation ensures |x - y| is never 0, avoiding singularities,
-    # and satisfies the eta-admissibility condition.
-    Y = torch.rand((num_points, dim)) + torch.tensor([3] * dim)
-
-    """
-    Prepares the matrix A based on the smooth operator kernel:
-    f1(x, y) = 1 / (4 * pi * |x - y|)
-    f2(x, y) = cos(k * |x - y|) / |x - y|
-    """
-    kernel_function_selection = 2  # 1 or 2
-
-    # Compute pairwise Euclidean distances between points in X and Y
-    # dist_matrix shape: [num_points_x, num_points_y]
-    dist_matrix = torch.cdist(X, Y, p=2.0)
-
-    # The asymptotically smooth function
-    if kernel_function_selection == 1:
-        A = 1.0 / (4 * torch.pi * dist_matrix)
-    elif kernel_function_selection == 2:
-        k = 2.0
-        A = torch.cos(k * dist_matrix) / dist_matrix
-    else:
-        raise ValueError("Invalid kernel function selection. Choose 1 or 2.")
-
-    return A
+from pytorch_tci.utility import (
+    compute_relative_error,
+    compute_absolute_error,
+    prepare_random_matrix,
+    prepare_asymptotically_smooth_tensor,
+)
 
 
 def test_ci_single(matrix, method):
@@ -83,7 +47,7 @@ def test_ci_single(matrix, method):
 
     query_approximation = query_interpolation_matrix()
     relative_error = compute_relative_error(matrix, query_approximation)
-    absolute_error = torch.max(torch.abs(matrix - query_approximation))
+    absolute_error = compute_absolute_error(matrix, query_approximation)
 
     result = {
         "num_pivots": len(I),
@@ -109,7 +73,9 @@ def test_ci(N, r, method, num_iterations, test_type="random"):
     if test_type == "random":
         prepare_test_matrix = lambda: prepare_random_matrix(N, r)
     elif test_type == "smooth":
-        prepare_test_matrix = lambda: prepare_asymptotically_smooth_matrix(N, dim=5)
+        prepare_test_matrix = lambda: prepare_asymptotically_smooth_tensor(
+            (N, N), dim=5
+        )
 
     # warm up
     for _ in tqdm.tqdm(range(3), desc=f"Warm up {method} ......"):
@@ -153,19 +119,71 @@ def test_ci(N, r, method, num_iterations, test_type="random"):
         f"Memory cost:\t\t{memory_costs.mean().item():.2f} ± {memory_costs.std().item():.2f} MB"
     )
 
+
+def plot_logs(logs, method, matrix):
+    # Parse logs data (skipping header)
+    iterations = [row[0] for row in logs[1:]]
+    abs_errors = [row[5] for row in logs[1:]]
+    crs = [row[6] for row in logs[1:]]
+
+    fig, (ax1, ax3) = plot.subplots(1, 2, figsize=(12, 6))
+
+    color = "tab:blue"
+    ax1.set_xlabel("Iteration")
+    ax1.set_ylabel("Absolute Error", color=color)
+    ax1.plot(iterations, abs_errors, color=color, label="Absolute Error")
+    ax1.tick_params(axis="y", labelcolor=color)
+    ax1.set_yscale("log")
+
+    ax2 = ax1.twinx()
+    color = "tab:red"
+    ax2.set_ylabel("Compression Ratio (%)", color=color)
+    ax2.plot(iterations, crs, color=color, linestyle="--", label="CR")
+    ax2.tick_params(axis="y", labelcolor=color)
+    ax1.set_title(
+        f"Cross Interpolation Error and CR ({method.capitalize()}, N={matrix.size(0)})"
+    )
+    ax1.grid(True, which="both", ls="--", alpha=0.5)
+
+    # Singular values subplot
+    S = torch.linalg.svdvals(matrix)
+    # Ensure it's sorted descending and on CPU
+    S = torch.sort(S, descending=True).values.cpu().numpy()
+
+    color = "tab:green"
+    ax3.plot(S, color=color, label="Singular Values")
+    ax3.set_yscale("log")
+    ax3.set_xlabel("Index")
+    ax3.set_ylabel("Singular Value", color=color)
+    ax3.tick_params(axis="y", labelcolor=color)
+    ax3.set_title("Singular Values of the Original Matrix")
+    ax3.grid(True, which="both", ls="--", alpha=0.5)
+
+    fig.tight_layout()
+    plot.show()
+
+
 def debug_ci(N, r, test_type, method):
     if test_type == "random":
         prepare_test_matrix = lambda: prepare_random_matrix(N, r)
     elif test_type == "smooth":
-        prepare_test_matrix = lambda: prepare_asymptotically_smooth_matrix(N, dim=5)
+        prepare_test_matrix = lambda: prepare_asymptotically_smooth_tensor(
+            (N, N), spatial_dim=5
+        )
 
     matrix = prepare_test_matrix().cuda()
-    result = test_ci_single(matrix, method)
-    print(result)
+    # result = test_ci_single(matrix, method)
+    # print(result)
+
+    I, J, (_, _, _, query_interpolation_matrix), logs = cross_interpolation(
+        matrix=matrix, method=method, error_threshold=1e-16, debug=True
+    )
+
+    plot_logs(logs, method, matrix)
 
 
 def main():
-    N, r = 400, 80
+    N, r = 1000, 80
     test_type = "smooth"
     method = "rook"
     debug_ci(N, r, test_type, method)

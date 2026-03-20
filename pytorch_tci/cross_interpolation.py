@@ -2,6 +2,7 @@ import torch
 
 from typing import Optional, Callable
 from enum import Enum, auto
+from pytorch_tci.utility import compute_relative_error, compute_absolute_error
 
 
 def query_interpolation_element(
@@ -189,6 +190,7 @@ def cross_interpolation(
     matrix: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
+    debug: bool = False,
 ) -> tuple[
     list[int],
     list[int],
@@ -276,6 +278,18 @@ def cross_interpolation(
     I: list[int] = []
     J: list[int] = []
     pivots = set()
+    iteration = 1
+    logs = [
+        [
+            "iteration",
+            "num_pivots",
+            "new_pivot",
+            "new_pivot_error",
+            "relative_error",
+            "absolute_error",
+            "compression_ratio",
+        ]
+    ]
 
     while len(pivots) < min(num_rows, num_columns):
         with torch.no_grad():
@@ -296,16 +310,50 @@ def cross_interpolation(
         ecs = torch.cat((ecs, ec[torch.newaxis, :]), dim=0)  # [t+1, m]
         ers = torch.cat((ers, er[torch.newaxis, :]), dim=0)  # [t+1, n]
 
-        ###
-        error_matrix = query_error_full(query_matrix, eps, ecs, ers)
-        singular_values = torch.linalg.svdvals(error_matrix)
-        print(
-            f"pivot: ({i_star}, {j_star}), error: {ep.abs().item():.3e}, "
-            f"max singular value: {singular_values[0].item():.3e}"
-        )
-        ###
+        if debug:
+            original_matrix = matrix
+            if original_matrix is None:
+                matrix = query_matrix()
+                original_matrix = matrix
+            interpolation_matrix = query_interpolation_full(eps, ecs, ers)
 
-    return (
+            compression_ratio = torch.numel(eps) + torch.numel(ecs) + torch.numel(ers)
+            compression_ratio /= torch.numel(original_matrix)
+
+            relative_error = compute_relative_error(
+                original_matrix, interpolation_matrix
+            )
+            absolute_error = compute_absolute_error(
+                original_matrix, interpolation_matrix
+            )
+
+            print(
+                (
+                    f"i={iteration},"
+                    f"num_pivots={len(pivots)},"
+                    f"new_pivot=({i_star}, {j_star}),"
+                    f"new_pivot_error={ep.abs().item():.3e},"
+                    f"e_r={relative_error:.3%},"
+                    f"e_a={absolute_error:.3e},"
+                    f"CR={compression_ratio:.3%}"
+                )
+            )
+
+            logs.append(
+                [
+                    iteration,
+                    len(pivots),
+                    (i_star, j_star),
+                    ep.abs().item(),
+                    relative_error,
+                    absolute_error,
+                    compression_ratio,
+                ]
+            )
+
+        iteration += 1
+
+    output = (
         I,
         J,
         (
@@ -315,6 +363,11 @@ def cross_interpolation(
             lambda: query_interpolation_full(eps, ecs, ers),
         ),
     )
+
+    if debug:
+        output += (logs,)
+
+    return output
 
 
 if __name__ == "__main__":

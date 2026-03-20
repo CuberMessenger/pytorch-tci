@@ -4,10 +4,12 @@ from .tensor_cross_interpolation import (
     BatchedMultiIndex,
     tensor_cross_interpolation,
 )
+from . import utility
 
 __all__ = [
     "cross_interpolation",
     "MultiIndex",
     "BatchedMultiIndex",
     "tensor_cross_interpolation",
+    "utility",
 ]
