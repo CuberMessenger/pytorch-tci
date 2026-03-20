@@ -472,7 +472,11 @@ def tensor_cross_interpolation(
         ]
     ]
     iteration = 1
-    max_iteration = 1000
+    num_elements = 1
+    for s in size:
+        num_elements *= s
+    max_iteration = torch.sqrt(torch.tensor(num_elements)).item() // 2
+    
     changed = True
     while changed and iteration <= max_iteration:
         changed = False

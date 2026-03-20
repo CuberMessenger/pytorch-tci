@@ -279,6 +279,7 @@ def cross_interpolation(
     J: list[int] = []
     pivots = set()
     iteration = 1
+    max_iteration = max(num_rows, num_columns) // 2
     logs = [
         [
             "iteration",
@@ -291,7 +292,7 @@ def cross_interpolation(
         ]
     ]
 
-    while len(pivots) < min(num_rows, num_columns):
+    while len(pivots) < min(num_rows, num_columns) and iteration <= max_iteration:
         with torch.no_grad():
             i_star, j_star, ep, ec, er = searcher((eps, ecs, ers))
 

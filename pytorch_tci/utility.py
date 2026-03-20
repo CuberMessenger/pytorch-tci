@@ -42,7 +42,7 @@ def prepare_asymptotically_smooth_tensor(
     """
     In 2D, diam(D_Y) <= eta * dist(D_X, D_Y)
     """
-    eta = 0.99  # higher eta means looser separation
+    eta = 0.9  # higher eta means looser separation
 
     """
     C is the offset to the sum of the clusters
@@ -92,7 +92,7 @@ def prepare_asymptotically_smooth_tensor(
         T = 1.0 / (4 * torch.pi * dist_tensor)
     elif kernel_function_selection == 2:
         # cos(k * r) / r
-        k = 3.0
+        k = 4.0
         T = torch.cos(k * dist_tensor) / dist_tensor
     else:
         raise ValueError("Invalid kernel function selection. Choose 1 or 2.")

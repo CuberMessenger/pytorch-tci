@@ -1,7 +1,9 @@
+import os
 import tqdm
 import time
 import torch
 import matplotlib.pyplot as plot
+import matplotlib.ticker as mtick
 
 from pytorch_tci import cross_interpolation
 
@@ -124,28 +126,40 @@ def plot_logs(logs, method, matrix):
     # Parse logs data (skipping header)
     iterations = [row[0] for row in logs[1:]]
     abs_errors = [row[5] for row in logs[1:]]
-    crs = [row[6] for row in logs[1:]]
+    crs = [row[6] * 100 for row in logs[1:]]
 
-    fig, (ax1, ax3) = plot.subplots(1, 2, figsize=(12, 6))
+    fig1, ax1 = plot.subplots(figsize=(8, 6))
 
     color = "tab:blue"
     ax1.set_xlabel("Iteration")
-    ax1.set_ylabel("Absolute Error", color=color)
+    ax1.set_ylabel("Max Absolute Error", color=color)
     ax1.plot(iterations, abs_errors, color=color, label="Absolute Error")
     ax1.tick_params(axis="y", labelcolor=color)
     ax1.set_yscale("log")
 
     ax2 = ax1.twinx()
     color = "tab:red"
-    ax2.set_ylabel("Compression Ratio (%)", color=color)
+    ax2.set_ylabel("Compression Ratio", color=color)
     ax2.plot(iterations, crs, color=color, linestyle="--", label="CR")
     ax2.tick_params(axis="y", labelcolor=color)
+    ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
+
     ax1.set_title(
         f"Cross Interpolation Error and CR ({method.capitalize()}, N={matrix.size(0)})"
     )
     ax1.grid(True, which="both", ls="--", alpha=0.5)
 
+    fig1.tight_layout()
+    plot.savefig(
+        os.path.join(
+            "outputs", f"ci-{method}-{matrix.size(0)}-{matrix.size(1)}-error-cr.png"
+        ),
+        dpi=330,
+    )
+    plot.close(fig1)
+
     # Singular values subplot
+    fig2, ax3 = plot.subplots(figsize=(6, 6))
     S = torch.linalg.svdvals(matrix)
     # Ensure it's sorted descending and on CPU
     S = torch.sort(S, descending=True).values.cpu().numpy()
@@ -159,9 +173,13 @@ def plot_logs(logs, method, matrix):
     ax3.set_title("Singular Values of the Original Matrix")
     ax3.grid(True, which="both", ls="--", alpha=0.5)
 
-    fig.tight_layout()
+    fig2.tight_layout()
     # plot.show()
-    plot.savefig(f"ci-{method}-{matrix.size(0)}-{matrix.size(1)}.png", dpi=330)
+    plot.savefig(
+        os.path.join("outputs", f"ci-{method}-{matrix.size(0)}-{matrix.size(1)}.png"),
+        dpi=330,
+    )
+    plot.close(fig2)
 
 
 def debug_ci(N, r, test_type, method):
@@ -186,7 +204,7 @@ def debug_ci(N, r, test_type, method):
 def main():
     N, r = 1024, 80
     test_type = "smooth"
-    method = "rook"
+    method = "full"
     debug_ci(N, r, test_type, method)
 
     # # N, r = 240, 120

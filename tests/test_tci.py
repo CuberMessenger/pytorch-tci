@@ -1,7 +1,10 @@
+import os
 import tqdm
 import time
 import torch
 import matplotlib.pyplot as plot
+import matplotlib.ticker as mtick
+
 
 from pytorch_tci import MultiIndex, BatchedMultiIndex, tensor_cross_interpolation
 from pytorch_tci.utility import (
@@ -101,52 +104,69 @@ def plot_logs(logs, method, tensor):
     # Parse logs data (skipping header)
     iterations = [row[0] for row in logs[1:]]
     abs_errors = [row[-2] for row in logs[1:]]
-    crs = [row[-1] for row in logs[1:]]
+    crs = [row[-1] * 100 for row in logs[1:]]
 
-    fig, (ax1, ax3) = plot.subplots(1, 2, figsize=(12, 6))
+    tensor_size_str = "-".join([str(s) for s in tensor.size()])
+
+    # --- 1) Plot and save Error and CR ---
+    fig1, ax1 = plot.subplots(figsize=(8, 6))
 
     color = "tab:blue"
     ax1.set_xlabel("Iteration")
-    ax1.set_ylabel("Absolute Error", color=color)
+    ax1.set_ylabel("Max Absolute Error", color=color)
     ax1.plot(iterations, abs_errors, color=color, label="Absolute Error")
     ax1.tick_params(axis="y", labelcolor=color)
     ax1.set_yscale("log")
 
     ax2 = ax1.twinx()
     color = "tab:red"
-    ax2.set_ylabel("Compression Ratio (%)", color=color)
+    ax2.set_ylabel("Compression Ratio", color=color)
     ax2.plot(iterations, crs, color=color, linestyle="--", label="CR")
     ax2.tick_params(axis="y", labelcolor=color)
+    ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
     ax1.set_title(
         f"Tensor Cross Interpolation Error and CR ({method.capitalize()}, {list(tensor.size())})"
     )
     ax1.grid(True, which="both", ls="--", alpha=0.5)
 
-    i = 100
-    superblock = logs[i][-4]
-    r_l, d_l, d_r, r_r = tuple(superblock.size())
-    superblock = superblock.reshape(r_l * d_l, d_r * r_r)
-
-    # Singular values subplot
-    S = torch.linalg.svdvals(superblock)
-    # Ensure it's sorted descending and on CPU
-    S = torch.sort(S, descending=True).values.cpu().numpy()
-
-    color = "tab:green"
-    ax3.plot(S, color=color, label="Singular Values")
-    ax3.set_yscale("log")
-    ax3.set_xlabel("Index")
-    ax3.set_ylabel("Singular Value", color=color)
-    ax3.tick_params(axis="y", labelcolor=color)
-    ax3.set_title(
-        f"Singular Values of the {i}-th Superblock ({method.capitalize()}, {list(superblock.size())})"
+    fig1.tight_layout()
+    plot.savefig(
+        os.path.join("outputs", f"tci-{method}-{tensor_size_str}-error-cr.png"), dpi=330
     )
-    ax3.grid(True, which="both", ls="--", alpha=0.5)
+    plot.close(fig1)
 
-    fig.tight_layout()
-    # plot.show()
-    tensor_size_str = "-".join([str(s) for s in tensor.size()])
-    plot.savefig(f"tci-{method}-{tensor_size_str}.png", dpi=330)
+    # --- 2) Plot and save singular values for each superblock ---
+    for i in range(1, 11):
+        if i * 100 >= len(logs):
+            break
+
+        fig2, ax3 = plot.subplots(figsize=(6, 6))
+
+        superblock = logs[i * 100][-4]
+        r_l, d_l, d_r, r_r = tuple(superblock.size())
+        superblock = superblock.reshape(r_l * d_l, d_r * r_r)
+
+        # Singular values subplot
+        S = torch.linalg.svdvals(superblock)
+        # Ensure it's sorted descending and on CPU
+        S = torch.sort(S, descending=True).values.cpu().numpy()
+
+        color = "tab:green"
+        ax3.plot(S, color=color, label="Singular Values")
+        ax3.set_yscale("log")
+        ax3.set_xlabel("Index")
+        ax3.set_ylabel("Singular Value", color=color)
+        ax3.tick_params(axis="y", labelcolor=color)
+        ax3.set_title(
+            f"Singular Values of the {i}-th Superblock ({method.capitalize()}, {list(superblock.size())})"
+        )
+        ax3.grid(True, which="both", ls="--", alpha=0.5)
+
+        fig2.tight_layout()
+        plot.savefig(
+            os.path.join("outputs", f"tci-{method}-it{i}-superblock-{r_l * d_l}-{d_r * r_r}.png"), dpi=330
+        )
+        plot.close(fig2)
 
 
 def debug_tci_smooth():
@@ -160,27 +180,27 @@ def debug_tci_smooth():
     tensor = tensor.cuda()
     method = "full"
 
-    torch.cuda.synchronize()
-    start_time = time.perf_counter_ns()
+    # torch.cuda.synchronize()
+    # start_time = time.perf_counter_ns()
 
-    Is, Js, cores, query_interpolation_element, query_interpolation_tensor = (
-        tensor_cross_interpolation(
-            tensor=tensor, method=method, error_threshold=1e-6, debug=False
-        )
-    )
-    torch.cuda.synchronize()
-    end_time = time.perf_counter_ns()
-    time_cost = (end_time - start_time) / 1e6  # ms
-    print(f"TCI completed in {time_cost:.2f} ms")
-    # TCI completed in 12899.78 ms for size (16, 16, 16, 16, 16) and spatial_dim=5
-
-    # Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+    # Is, Js, cores, query_interpolation_element, query_interpolation_tensor = (
     #     tensor_cross_interpolation(
-    #         tensor=tensor, method=method, error_threshold=1e-6, debug=True
+    #         tensor=tensor, method=method, error_threshold=1e-6, debug=False
     #     )
     # )
+    # torch.cuda.synchronize()
+    # end_time = time.perf_counter_ns()
+    # time_cost = (end_time - start_time) / 1e6  # ms
+    # print(f"TCI completed in {time_cost:.2f} ms")
+    # # TCI completed in 12899.78 ms for size (16, 16, 16, 16, 16) and spatial_dim=5
 
-    # plot_logs(logs, method, tensor)
+    Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+        tensor_cross_interpolation(
+            tensor=tensor, method=method, error_threshold=1e-16, debug=True
+        )
+    )
+
+    plot_logs(logs, method, tensor)
 
 
 def main():
