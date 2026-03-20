@@ -158,7 +158,7 @@ def debug_tci_smooth():
 
     tensor = prepare_asymptotically_smooth_tensor(size, spatial_dim)
     tensor = tensor.cuda()
-    method = "rook"
+    method = "full"
 
     torch.cuda.synchronize()
     start_time = time.perf_counter_ns()

@@ -230,72 +230,7 @@ def rook_search_query(
     superblock_size: tuple[int],
     query_error_superblock_element: Callable[[MultiIndex], torch.Tensor],
     max_iteration: int = 4,
-) -> tuple[int, int, int, int, torch.Tensor]:
-    a_star = torch.randint(0, superblock_size[0], (1,)).item()
-    i_star = torch.randint(0, superblock_size[1], (1,)).item()
-    j_star = 0
-    b_star = 0
-    ep = None
-
-    def rook_row():
-        nonlocal a_star, i_star, j_star, b_star, ep
-        slice_row = query_error_superblock_element(
-            (a_star, i_star, slice(None), slice(None))
-        )
-        next_j, next_b = torch.unravel_index(
-            torch.argmax(slice_row.abs()), slice_row.size()
-        )
-        next_j, next_b = next_j.item(), next_b.item()
-
-        moved = (next_j != j_star) or (next_b != b_star)
-        j_star, b_star = next_j, next_b
-        ep = query_error_superblock_element((a_star, i_star, j_star, b_star))
-
-        return moved
-
-    def rook_column():
-        nonlocal a_star, i_star, j_star, b_star, ep
-        slice_col = query_error_superblock_element(
-            (slice(None), slice(None), j_star, b_star)
-        )
-        next_a, next_i = torch.unravel_index(
-            torch.argmax(slice_col.abs()), slice_col.size()
-        )
-        next_a, next_i = next_a.item(), next_i.item()
-
-        moved = (next_a != a_star) or (next_i != i_star)
-        a_star, i_star = next_a, next_i
-        ep = query_error_superblock_element((a_star, i_star, j_star, b_star))
-
-        return moved
-
-    rook_row()
-    rook_condition = RookCondition.RULES_ROW
-
-    for _ in range(max_iteration - 1):
-        if rook_condition is RookCondition.RULES_ROW:
-            moved = rook_column()
-
-            if moved:
-                rook_condition = RookCondition.RULES_COLUMN
-            else:
-                break
-
-            continue
-
-        if rook_condition is RookCondition.RULES_COLUMN:
-            moved = rook_row()
-
-            if moved:
-                rook_condition = RookCondition.RULES_ROW
-            else:
-                break
-
-            continue
-
-    ep = query_error_superblock_element((a_star, i_star, j_star, b_star))
-
-    return a_star, i_star, j_star, b_star, ep
+) -> tuple[int, int, int, int, torch.Tensor]: ...
 
 
 def sweep_one(
@@ -379,60 +314,7 @@ def sweep_one_query(
     searcher,
     error_threshold,
     debug,
-):
-    superblock_approximation_middle_pinv = torch.linalg.pinv(
-        query_tensor_element_batched(Is[k] + Js[k + 1])
-    )
-
-    def query_error_superblock_element(mi: MultiIndex) -> torch.Tensor:
-        a, i, j, b = mi
-        superblock_element = query_tensor_element_batched(
-            tuple(t[a][0] for t in Is[k - 1])
-            + (i,)
-            + (j,)
-            + tuple(t[0][b] for t in Js[k + 2])
-        )
-
-        superblock_interpolation_element_left = query_tensor_element_batched(
-            tuple(t[a][0] for t in Is[k - 1])
-            + (i,)
-            + tuple(t[0][b] for t in Js[k + 1])
-        )
-
-        superblock_interpolation_element_right = query_tensor_element_batched(
-            tuple(t[a][0] for t in Is[k])
-            + (j,)
-            + tuple(t[0][b] for t in Js[k + 2])
-        )
-
-        superblock_interpolation_element = torch.einsum(
-            "apc,cb,bqd->apqd",
-            superblock_interpolation_element_left.unsqueeze(0),
-            superblock_approximation_middle_pinv,
-            superblock_interpolation_element_right.unsqueeze(0),
-        ).squeeze()
-
-        return superblock_element - superblock_interpolation_element
-
-    # find a new pivot
-    ## form the superblock
-    changed = False
-
-    a_star, i_star, j_star, b_star, ep = searcher(size, query_error_superblock_element)
-
-    # update Is[k], Js[k+1]
-    if ep.abs() > error_threshold:
-        changed = True
-
-        for m in range(k - 1):
-            Is[k][m].append([Is[k - 1][m][a_star][0]])
-        Is[k][k - 1].append([i_star])
-
-        Js[k + 1][0][0].append(j_star)
-        for m in range(dimension - k - 1):
-            Js[k + 1][m + 1][0].append(Js[k + 2][m][0][b_star])
-
-    return changed, a_star, i_star, j_star, b_star, ep
+): ...
 
 
 def construct_cores(
