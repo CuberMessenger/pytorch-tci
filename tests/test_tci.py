@@ -144,27 +144,43 @@ def plot_logs(logs, method, tensor):
     ax3.grid(True, which="both", ls="--", alpha=0.5)
 
     fig.tight_layout()
-    plot.show()
+    # plot.show()
+    tensor_size_str = "-".join([str(s) for s in tensor.size()])
+    plot.savefig(f"tci-{method}-{tensor_size_str}.png", dpi=330)
 
 
 def debug_tci_smooth():
     size = (5, 6, 7, 8, 9)
     size = (4, 4, 4, 4, 4, 4, 4, 4, 4)
     size = tuple([4] * 14)  # 4^14 = 268435456; 4^15 = 1073741824 (OOM)
-    size = (14, 15, 16, 17, 18)
+    size = (16, 16, 16, 16, 16)
     spatial_dim = 5
 
     tensor = prepare_asymptotically_smooth_tensor(size, spatial_dim)
     tensor = tensor.cuda()
     method = "rook"
 
-    Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+    torch.cuda.synchronize()
+    start_time = time.perf_counter_ns()
+
+    Is, Js, cores, query_interpolation_element, query_interpolation_tensor = (
         tensor_cross_interpolation(
-            tensor=tensor, method=method, error_threshold=1e-6, debug=True
+            tensor=tensor, method=method, error_threshold=1e-6, debug=False
         )
     )
+    torch.cuda.synchronize()
+    end_time = time.perf_counter_ns()
+    time_cost = (end_time - start_time) / 1e6  # ms
+    print(f"TCI completed in {time_cost:.2f} ms")
+    # TCI completed in 12899.78 ms for size (16, 16, 16, 16, 16) and spatial_dim=5
 
-    plot_logs(logs, method, tensor)
+    # Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+    #     tensor_cross_interpolation(
+    #         tensor=tensor, method=method, error_threshold=1e-6, debug=True
+    #     )
+    # )
+
+    # plot_logs(logs, method, tensor)
 
 
 def main():

@@ -160,7 +160,8 @@ def plot_logs(logs, method, matrix):
     ax3.grid(True, which="both", ls="--", alpha=0.5)
 
     fig.tight_layout()
-    plot.show()
+    # plot.show()
+    plot.savefig(f"ci-{method}-{matrix.size(0)}-{matrix.size(1)}.png", dpi=330)
 
 
 def debug_ci(N, r, test_type, method):
@@ -183,7 +184,7 @@ def debug_ci(N, r, test_type, method):
 
 
 def main():
-    N, r = 1000, 80
+    N, r = 1024, 80
     test_type = "smooth"
     method = "rook"
     debug_ci(N, r, test_type, method)
