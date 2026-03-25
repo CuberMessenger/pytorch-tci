@@ -202,7 +202,7 @@ def debug_ci(N, r, test_type, method):
 
 
 def main():
-    N, r = 1024, 80
+    N, r = 1024, 128
     test_type = "smooth"
     method = "full"
     debug_ci(N, r, test_type, method)

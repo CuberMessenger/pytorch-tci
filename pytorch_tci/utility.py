@@ -10,7 +10,7 @@ def compute_absolute_error(A, A_tilde):
 
 
 def prepare_random_matrix(N, r):
-    return torch.rand((N, r)) @ torch.rand((r, N))
+    return torch.rand((N, r)) @ torch.rand((r, N)) + torch.randn((N, N)) * 1e-3
 
 
 def prepare_random_tensor(size, rank):
@@ -21,6 +21,7 @@ def prepare_random_tensor(size, rank):
         tensor = torch.transpose(tensor, 0, i)
         tensor = torch.tensordot(torch.randn(size[i], rank[i]), tensor, dims=([1], [0]))
         tensor = torch.transpose(tensor, 0, i)
+    tensor += torch.randn(size) * 1e-3  # add small noise
 
     return tensor
 
