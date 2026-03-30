@@ -364,6 +364,7 @@ def tensor_cross_interpolation(
     tensor: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
+    max_rank: Optional[int] = None,
     debug: bool = False,
 ) -> tuple[
     tuple[MultiIndex, ...],
@@ -395,6 +396,9 @@ def tensor_cross_interpolation(
 
         case _:
             raise ValueError(f"Unknown method: {method}")
+        
+    if max_rank is None:
+        max_rank = min(size)
 
     element = query_tensor_element((0,) * dimension)
     device = element.device
@@ -477,6 +481,7 @@ def tensor_cross_interpolation(
         num_elements *= s
     max_iteration = torch.sqrt(torch.tensor(num_elements)).item() // 2
     
+    rank = 1
     changed = True
     while changed and iteration <= max_iteration:
         changed = False
@@ -496,6 +501,7 @@ def tensor_cross_interpolation(
             )
 
             changed |= is_changed
+            rank = max([len(Is[k][0]) for k in range(1, dimension)])
 
             if debug:
                 original_tensor = tensor
@@ -512,8 +518,8 @@ def tensor_cross_interpolation(
                 )
                 interpolation = query_interpolation_tensor(cores)
 
-                rank = [1] + [len(Is[k][0]) for k in range(1, dimension)] + [1]
-                max_rank = max(rank)
+                ranks = [1] + [len(Is[k][0]) for k in range(1, dimension)] + [1]
+                rank = max(ranks)
 
                 relative_error = compute_relative_error(original_tensor, interpolation)
                 absolute_error = compute_absolute_error(original_tensor, interpolation)
@@ -535,7 +541,7 @@ def tensor_cross_interpolation(
 
                 print(
                     (
-                        f"i={iteration},k={k},max_rank={max_rank},"
+                        f"i={iteration},k={k},rank={rank},"
                         f"new_pivot=({a_star}, {i_star}, {j_star}, {b_star}),"
                         f"new_pivot_error={ep:.3e},"
                         f"e_r={relative_error:.3%},"
@@ -548,7 +554,7 @@ def tensor_cross_interpolation(
                     [
                         iteration,
                         k,
-                        max_rank,
+                        rank,
                         (i_star, j_star),
                         ep.abs().item(),
                         superblock,
@@ -559,6 +565,11 @@ def tensor_cross_interpolation(
                 )
 
             iteration += 1
+
+            if rank >= max_rank:
+                print(f"Reached max rank {max_rank}. Stopping iteration.")
+                changed = False
+                break
 
     cores = construct_cores(
         Is, Js, dimension, query_tensor_element, query_tensor_element_batched

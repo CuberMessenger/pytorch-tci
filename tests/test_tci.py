@@ -2,6 +2,7 @@ import os
 import tqdm
 import time
 import torch
+import numpy as np
 import matplotlib.pyplot as plot
 import matplotlib.ticker as mtick
 
@@ -13,6 +14,7 @@ from pytorch_tci.utility import (
     prepare_random_tensor,
     prepare_asymptotically_smooth_tensor,
 )
+from PIL import Image
 
 
 def test_tci_single(tensor, method):
@@ -207,9 +209,31 @@ def debug_tci(test_type):
 
     plot_logs(logs, method, tensor)
 
+def test_tci_image(method):
+    def prepare_image_tensor():
+        img = Image.open("guoba.jpeg").convert("RGB")
+        tensor = torch.from_numpy(np.array(img)).float() / 255.0
+        return tensor
+
+    tensor = prepare_image_tensor().cuda()
+
+    Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+        tensor_cross_interpolation(
+            tensor=tensor, method=method, error_threshold=1e-3, max_rank=128, debug=True
+        )
+    )
+
+    plot_logs(logs, method, tensor)
+
+    reconstructed_image = query_interpolation_tensor().transpose(0, 1).cpu().numpy() * 255.0
+    reconstructed_image = np.clip(reconstructed_image, 0, 255).astype(np.uint8)
+    reconstructed_image = reconstructed_image[::-1, :, :]
+    Image.fromarray(reconstructed_image).save("guoba_tci_reconstructed.jpg", quality=99)
+
 
 def main():
-    debug_tci("random")
+    # debug_tci("random")
+    test_tci_image("full")
 
 
 if __name__ == "__main__":

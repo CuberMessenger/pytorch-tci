@@ -190,6 +190,7 @@ def cross_interpolation(
     matrix: Optional[torch.Tensor] = None,
     method: str = "rook",
     error_threshold: float = 1e-3,
+    max_rank: Optional[int] = None,
     debug: bool = False,
 ) -> tuple[
     list[int],
@@ -267,6 +268,9 @@ def cross_interpolation(
         case _:
             raise ValueError(f"Unknown method: {method}. Use 'full' or 'rook'.")
 
+    if max_rank is None:
+        max_rank = min(num_rows, num_columns)
+
     element = query_matrix_element(0, 0)
     device = element.device
     dtype = element.dtype
@@ -292,7 +296,7 @@ def cross_interpolation(
         ]
     ]
 
-    while len(pivots) < min(num_rows, num_columns) and iteration <= max_iteration:
+    while len(pivots) < min(num_rows, num_columns) and len(pivots) < max_rank and iteration <= max_iteration:
         with torch.no_grad():
             i_star, j_star, ep, ec, er = searcher((eps, ecs, ers))
 

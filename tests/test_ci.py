@@ -2,10 +2,13 @@ import os
 import tqdm
 import time
 import torch
+import numpy as np
 import matplotlib.pyplot as plot
 import matplotlib.ticker as mtick
 
 from pytorch_tci import cross_interpolation
+from PIL import Image
+
 
 from pytorch_tci.utility import (
     compute_relative_error,
@@ -201,11 +204,34 @@ def debug_ci(N, r, test_type, method):
     plot_logs(logs, method, matrix)
 
 
+def test_ci_image(method):
+    def prepare_image_matrix():
+        img = Image.open("guoba.jpeg").convert("L")
+        matrix = torch.from_numpy(np.array(img)).float() / 255.0
+        return matrix
+
+    prepare_test_matrix = prepare_image_matrix
+
+    matrix = prepare_test_matrix().cuda()
+
+    I, J, (_, _, _, query_interpolation_matrix), logs = cross_interpolation(
+        matrix=matrix, method=method, error_threshold=1e-3, max_rank=128, debug=True
+    )
+
+    plot_logs(logs, method, matrix)
+
+    reconstucted_image = query_interpolation_matrix().T.cpu().numpy() * 255.0
+    reconstucted_image = np.clip(reconstucted_image, 0, 255).astype(np.uint8)
+    reconstucted_image = reconstucted_image[::-1, :]
+    Image.fromarray(reconstucted_image).save("guoba_ci_reconstructed.jpg", quality=99)
+
+
 def main():
     N, r = 1024, 128
     test_type = "random"
     method = "full"
-    debug_ci(N, r, test_type, method)
+    # debug_ci(N, r, test_type, method)
+    test_ci_image(method)
 
     # # N, r = 240, 120
     # N, r = 1000, 800
