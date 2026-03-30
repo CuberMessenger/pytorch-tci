@@ -219,7 +219,7 @@ def test_tci_image(method):
 
     Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
         tensor_cross_interpolation(
-            tensor=tensor, method=method, error_threshold=1e-3, max_rank=128, debug=True
+            tensor=tensor, method=method, error_threshold=1e-3, max_rank=100, debug=True
         )
     )
 

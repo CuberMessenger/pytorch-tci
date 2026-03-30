@@ -398,7 +398,7 @@ def tensor_cross_interpolation(
             raise ValueError(f"Unknown method: {method}")
         
     if max_rank is None:
-        max_rank = min(size)
+        max_rank = max(size)
 
     element = query_tensor_element((0,) * dimension)
     device = element.device
