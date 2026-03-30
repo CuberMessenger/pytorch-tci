@@ -209,7 +209,7 @@ def debug_tci(test_type):
 
 
 def main():
-    debug_tci("smooth")
+    debug_tci("random")
 
 
 if __name__ == "__main__":
