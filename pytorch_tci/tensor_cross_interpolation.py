@@ -574,6 +574,8 @@ def tensor_cross_interpolation(
     cores = construct_cores(
         Is, Js, dimension, query_tensor_element, query_tensor_element_batched
     )
+    ranks = [1] + [len(Is[k][0]) for k in range(1, dimension)] + [1]
+
     if debug:
         for k, core in enumerate(cores):
             print(f"core {k} shape: {list(core.size())}")
@@ -582,6 +584,7 @@ def tensor_cross_interpolation(
         Is,
         Js,
         cores,
+        ranks,
         lambda mi: query_interpolation_element(mi, cores),
         lambda: query_interpolation_tensor(cores),
     )

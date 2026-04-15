@@ -178,9 +178,9 @@ def debug_tci(test_type):
         tensor = prepare_random_tensor(size, rank)
     else:
         size = (5, 6, 7, 8, 9)
-        size = (4, 4, 4, 4, 4, 4, 4, 4, 4)
-        size = tuple([4] * 14)  # 4^14 = 268435456; 4^15 = 1073741824 (OOM)
-        size = (16, 16, 16, 16, 16)
+        # size = (4, 4, 4, 4, 4, 4, 4, 4, 4)
+        # size = tuple([4] * 14)  # 4^14 = 268435456; 4^15 = 1073741824 (OOM)
+        # size = (16, 16, 16, 16, 16)
         spatial_dim = 5
 
         tensor = prepare_asymptotically_smooth_tensor(size, spatial_dim)
@@ -190,7 +190,7 @@ def debug_tci(test_type):
     # torch.cuda.synchronize()
     # start_time = time.perf_counter_ns()
 
-    # Is, Js, cores, query_interpolation_element, query_interpolation_tensor = (
+    # Is, Js, cores, ranks, query_interpolation_element, query_interpolation_tensor = (
     #     tensor_cross_interpolation(
     #         tensor=tensor, method=method, error_threshold=1e-6, debug=False
     #     )
@@ -201,11 +201,23 @@ def debug_tci(test_type):
     # print(f"TCI completed in {time_cost:.2f} ms")
     # # TCI completed in 12899.78 ms for size (16, 16, 16, 16, 16) and spatial_dim=5
 
-    Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+    Is, Js, cores, ranks, query_interpolation_element, query_interpolation_tensor, logs = (
         tensor_cross_interpolation(
             tensor=tensor, method=method, error_threshold=1e-16, debug=True
         )
     )
+
+    print(f"Ranks: {ranks}")
+    print()
+
+    for i, I in enumerate(Is):
+        if len(I) > 0:
+            print(f"I_{i}: {torch.Tensor(I)[:, :, 0].size()}")
+    print()
+    
+    for j, J in enumerate(Js):
+        if J is not None and len(J) > 0:
+            print(f"J_{j}: {torch.Tensor(J)[:, 0, :].size()}")
 
     plot_logs(logs, method, tensor)
 
@@ -217,7 +229,7 @@ def test_tci_image(method):
 
     tensor = prepare_image_tensor().cuda()
 
-    Is, Js, cores, query_interpolation_element, query_interpolation_tensor, logs = (
+    Is, Js, cores, ranks, query_interpolation_element, query_interpolation_tensor, logs = (
         tensor_cross_interpolation(
             tensor=tensor, method=method, error_threshold=1e-3, max_rank=100, debug=True
         )
@@ -232,8 +244,8 @@ def test_tci_image(method):
 
 
 def main():
-    # debug_tci("random")
-    test_tci_image("full")
+    debug_tci("smooth")
+    # test_tci_image("full")
 
 
 if __name__ == "__main__":
