@@ -54,8 +54,9 @@ def prepare_asymptotically_smooth_tensor(
     s_pos = sum(c for c in coefficients if c > 0)
     s_neg = sum(abs(c) for c in coefficients if c < 0)
 
-    C = s_pos + s_neg / eta
-    print(f"Current eta ({eta:.2f}) requires C at least to be {C:.2f}")
+    old_C = s_pos + s_neg / eta
+    C = (s_pos + s_neg) / eta + s_neg
+    print(f"Current eta ({eta:.2f}) requires C at least to be {C:.2f} (old_C: {old_C:.2f}).")
     C = C * 1.1
     print(f"Setting C to {C:.2f} to satisfy the admissibility condition.")
 
