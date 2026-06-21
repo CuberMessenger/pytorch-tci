@@ -166,7 +166,10 @@ def plot_logs(logs, method, tensor):
 
         fig2.tight_layout()
         plot.savefig(
-            os.path.join("outputs", f"tci-{method}-it{i}-superblock-{r_l * d_l}-{d_r * r_r}.png"), dpi=330
+            os.path.join(
+                "outputs", f"tci-{method}-it{i}-superblock-{r_l * d_l}-{d_r * r_r}.png"
+            ),
+            dpi=330,
         )
         plot.close(fig2)
 
@@ -201,10 +204,16 @@ def debug_tci(test_type):
     # print(f"TCI completed in {time_cost:.2f} ms")
     # # TCI completed in 12899.78 ms for size (16, 16, 16, 16, 16) and spatial_dim=5
 
-    Is, Js, cores, ranks, query_interpolation_element, query_interpolation_tensor, logs = (
-        tensor_cross_interpolation(
-            tensor=tensor, method=method, error_threshold=1e-16, debug=True
-        )
+    (
+        Is,
+        Js,
+        cores,
+        ranks,
+        query_interpolation_element,
+        query_interpolation_tensor,
+        logs,
+    ) = tensor_cross_interpolation(
+        tensor=tensor, method=method, error_threshold=1e-16, debug=True
     )
 
     print(f"Ranks: {ranks}")
@@ -214,12 +223,13 @@ def debug_tci(test_type):
         if len(I) > 0:
             print(f"I_{i}: {torch.Tensor(I)[:, :, 0].size()}")
     print()
-    
+
     for j, J in enumerate(Js):
         if J is not None and len(J) > 0:
             print(f"J_{j}: {torch.Tensor(J)[:, 0, :].size()}")
 
     plot_logs(logs, method, tensor)
+
 
 def test_tci_image(method):
     def prepare_image_tensor():
@@ -229,15 +239,23 @@ def test_tci_image(method):
 
     tensor = prepare_image_tensor().cuda()
 
-    Is, Js, cores, ranks, query_interpolation_element, query_interpolation_tensor, logs = (
-        tensor_cross_interpolation(
-            tensor=tensor, method=method, error_threshold=1e-3, max_rank=100, debug=True
-        )
+    (
+        Is,
+        Js,
+        cores,
+        ranks,
+        query_interpolation_element,
+        query_interpolation_tensor,
+        logs,
+    ) = tensor_cross_interpolation(
+        tensor=tensor, method=method, error_threshold=1e-3, max_rank=100, debug=True
     )
 
     plot_logs(logs, method, tensor)
 
-    reconstructed_image = query_interpolation_tensor().transpose(0, 1).cpu().numpy() * 255.0
+    reconstructed_image = (
+        query_interpolation_tensor().transpose(0, 1).cpu().numpy() * 255.0
+    )
     reconstructed_image = np.clip(reconstructed_image, 0, 255).astype(np.uint8)
     reconstructed_image = reconstructed_image[::-1, :, :]
     Image.fromarray(reconstructed_image).save("guoba_tci_reconstructed.jpg", quality=99)
@@ -245,6 +263,8 @@ def test_tci_image(method):
 
 def test_theorem_1_conjecture_v2_for_d():
     max_rhos = []
+    max_e_locals = []
+    max_e_globals = []
 
     d_range = range(5, 13)
 
@@ -266,36 +286,56 @@ def test_theorem_1_conjecture_v2_for_d():
         )
 
         max_rho = 0
+        max_e_local = 0
+        max_e_global = 0
         for k in range(2, d - 1):
             print(f"Selecting split k={k} for analysis.")
-            
+
             ### Global
             left_shape = size[:k]
             right_shape = size[k:]
             A_k = tensor.reshape(int(np.prod(left_shape)), int(np.prod(right_shape)))
 
-            A_k_approximation_left = query_tensor_element_batched((slice(None),) * k + Js[k + 1])
-            A_k_approximation_left = A_k_approximation_left.view(-1, A_k_approximation_left.size(-1))
+            A_k_approximation_left = query_tensor_element_batched(
+                (slice(None),) * k + Js[k + 1]
+            )
+            A_k_approximation_left = A_k_approximation_left.view(
+                -1, A_k_approximation_left.size(-1)
+            )
 
             A_k_approximation_middle = query_tensor_element_batched(Is[k] + Js[k + 1])
 
-            A_k_approximation_right = query_tensor_element_batched(Is[k] + (slice(None),) * (d - k))
-            A_k_approximation_right = A_k_approximation_right.view(A_k_approximation_right.size(0), -1)
-            
-            A_k_approximation = A_k_approximation_left @ torch.linalg.pinv(A_k_approximation_middle) @ A_k_approximation_right
+            A_k_approximation_right = query_tensor_element_batched(
+                Is[k] + (slice(None),) * (d - k)
+            )
+            A_k_approximation_right = A_k_approximation_right.view(
+                A_k_approximation_right.size(0), -1
+            )
+
+            A_k_approximation = (
+                A_k_approximation_left
+                @ torch.linalg.pinv(A_k_approximation_middle)
+                @ A_k_approximation_right
+            )
 
             e_global = compute_absolute_error(A_k, A_k_approximation)
 
             ### Local
-            B_k = query_tensor_element_batched(Is[k - 1] + (slice(None), slice(None)) + Js[k + 2])
+            B_k = query_tensor_element_batched(
+                Is[k - 1] + (slice(None), slice(None)) + Js[k + 2]
+            )
             B_k = B_k.permute((0, 2, 3, 1))
 
-            B_k_approximation_left = query_tensor_element_batched(Is[k - 1] + (slice(None),) + Js[k + 1])
+            B_k_approximation_left = query_tensor_element_batched(
+                Is[k - 1] + (slice(None),) + Js[k + 1]
+            )
             B_k_approximation_left = B_k_approximation_left.permute((0, 2, 1))
 
             B_k_approximation_middle = A_k_approximation_middle
 
-            B_k_approximation_right = query_tensor_element_batched(Is[k] + (slice(None),) + Js[k + 2])
+            B_k_approximation_right = query_tensor_element_batched(
+                Is[k] + (slice(None),) + Js[k + 2]
+            )
             B_k_approximation_right = B_k_approximation_right.permute((0, 2, 1))
 
             B_k_approximation = torch.einsum(
@@ -313,17 +353,27 @@ def test_theorem_1_conjecture_v2_for_d():
 
             rho = e_global / e_local
             max_rho = max(rho, max_rho)
+            max_e_local = max(e_local, max_e_local)
+            max_e_global = max(e_global, max_e_global)
             print(f"Ratio: {rho}")
 
         print(f"\nMaximum Ratio for dimension {d}: {max_rho}")
         max_rhos.append(max_rho)
-    
-    for d, rho in zip(d_range, max_rhos):
-        print(f"Dimension {d}: {rho}")
+        max_e_locals.append(max_e_local)
+        max_e_globals.append(max_e_global)
+
+    for d, rho, e_local, e_global in zip(
+        d_range, max_rhos, max_e_locals, max_e_globals
+    ):
+        print(
+            f"Dimension {d}: Ratio = {rho:.3f}, Max Local Error = {e_local:.3e}, Max Global Error = {e_global:.3e}"
+        )
 
 
 def test_theorem_1_conjecture_v2_for_n():
     max_rhos = []
+    max_e_locals = []
+    max_e_globals = []
 
     n_range = range(3, 25)
 
@@ -346,36 +396,56 @@ def test_theorem_1_conjecture_v2_for_n():
         )
 
         max_rho = 0
+        max_e_local = 0
+        max_e_global = 0
         for k in range(2, d - 1):
             print(f"Selecting split k={k} for analysis.")
-            
+
             ### Global
             left_shape = size[:k]
             right_shape = size[k:]
             A_k = tensor.reshape(int(np.prod(left_shape)), int(np.prod(right_shape)))
 
-            A_k_approximation_left = query_tensor_element_batched((slice(None),) * k + Js[k + 1])
-            A_k_approximation_left = A_k_approximation_left.view(-1, A_k_approximation_left.size(-1))
+            A_k_approximation_left = query_tensor_element_batched(
+                (slice(None),) * k + Js[k + 1]
+            )
+            A_k_approximation_left = A_k_approximation_left.view(
+                -1, A_k_approximation_left.size(-1)
+            )
 
             A_k_approximation_middle = query_tensor_element_batched(Is[k] + Js[k + 1])
 
-            A_k_approximation_right = query_tensor_element_batched(Is[k] + (slice(None),) * (d - k))
-            A_k_approximation_right = A_k_approximation_right.view(A_k_approximation_right.size(0), -1)
-            
-            A_k_approximation = A_k_approximation_left @ torch.linalg.pinv(A_k_approximation_middle) @ A_k_approximation_right
+            A_k_approximation_right = query_tensor_element_batched(
+                Is[k] + (slice(None),) * (d - k)
+            )
+            A_k_approximation_right = A_k_approximation_right.view(
+                A_k_approximation_right.size(0), -1
+            )
+
+            A_k_approximation = (
+                A_k_approximation_left
+                @ torch.linalg.pinv(A_k_approximation_middle)
+                @ A_k_approximation_right
+            )
 
             e_global = compute_absolute_error(A_k, A_k_approximation)
 
             ### Local
-            B_k = query_tensor_element_batched(Is[k - 1] + (slice(None), slice(None)) + Js[k + 2])
+            B_k = query_tensor_element_batched(
+                Is[k - 1] + (slice(None), slice(None)) + Js[k + 2]
+            )
             B_k = B_k.permute((0, 2, 3, 1))
 
-            B_k_approximation_left = query_tensor_element_batched(Is[k - 1] + (slice(None),) + Js[k + 1])
+            B_k_approximation_left = query_tensor_element_batched(
+                Is[k - 1] + (slice(None),) + Js[k + 1]
+            )
             B_k_approximation_left = B_k_approximation_left.permute((0, 2, 1))
 
             B_k_approximation_middle = A_k_approximation_middle
 
-            B_k_approximation_right = query_tensor_element_batched(Is[k] + (slice(None),) + Js[k + 2])
+            B_k_approximation_right = query_tensor_element_batched(
+                Is[k] + (slice(None),) + Js[k + 2]
+            )
             B_k_approximation_right = B_k_approximation_right.permute((0, 2, 1))
 
             B_k_approximation = torch.einsum(
@@ -393,18 +463,26 @@ def test_theorem_1_conjecture_v2_for_n():
 
             rho = e_global / e_local
             max_rho = max(rho, max_rho)
+            max_e_local = max(e_local, max_e_local)
+            max_e_global = max(e_global, max_e_global)
             print(f"Ratio: {rho}")
 
         print(f"\nMaximum Ratio for dimension {d}: {max_rho}")
         max_rhos.append(max_rho)
-    
-    for n, rho in zip(n_range, max_rhos):
-        print(f"n = {n}: {rho}")
+        max_e_locals.append(max_e_local)
+        max_e_globals.append(max_e_global)
+
+    for n, rho, e_local, e_global in zip(
+        n_range, max_rhos, max_e_locals, max_e_globals
+    ):
+        print(
+            f"n = {n}: Ratio = {rho:.3f}, Max Local Error = {e_local:.3e}, Max Global Error = {e_global:.3e}"
+        )
 
 
 def main():
-    # test_theorem_1_conjecture_v2_for_d()
-    test_theorem_1_conjecture_v2_for_n()
+    test_theorem_1_conjecture_v2_for_d()
+    # test_theorem_1_conjecture_v2_for_n()
     # debug_tci("smooth")
     # test_tci_image("full")
 
