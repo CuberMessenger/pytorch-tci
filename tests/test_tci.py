@@ -86,22 +86,6 @@ def test_tci_single(tensor, method):
     return result
 
 
-def debug_tci_random():
-    size = (13, 14, 15, 16, 17)
-    rank = (3, 4, 5, 6, 7)
-
-    size = (5, 6, 7, 8, 9)
-    rank = (2, 2, 7, 4, 4)
-
-    size = (4, 4, 4, 4, 4, 4, 4, 4, 4)
-    rank = (2, 2, 2, 2, 2, 2, 2, 2, 2)
-
-    tensor = prepare_random_tensor(size, rank)
-    method = "rook"
-
-    result = test_tci_single(tensor, method)
-
-
 def plot_logs(logs, method, tensor):
     # Parse logs data (skipping header)
     iterations = [row[0] for row in logs[1:]]
@@ -176,14 +160,16 @@ def plot_logs(logs, method, tensor):
 
 def debug_tci(test_type):
     if test_type == "random":
-        size = (16, 16, 16, 16, 16)
-        rank = (5, 6, 7, 8, 9)
+        # size = (16, 16, 16, 16, 16)
+        # rank = (5, 6, 7, 8, 9)
+        size = (32, 32, 32, 32)
+        rank = (30, 30, 30, 30)
         tensor = prepare_random_tensor(size, rank)
     else:
-        size = (5, 6, 7, 8, 9)
+        # size = (5, 6, 7, 8, 9)
         # size = (4, 4, 4, 4, 4, 4, 4, 4, 4)
         # size = tuple([4] * 14)  # 4^14 = 268435456; 4^15 = 1073741824 (OOM)
-        # size = (16, 16, 16, 16, 16)
+        size = (32, 32, 32, 32)
         spatial_dim = 5
 
         tensor = prepare_asymptotically_smooth_tensor(size, spatial_dim)
@@ -213,7 +199,7 @@ def debug_tci(test_type):
         query_interpolation_tensor,
         logs,
     ) = tensor_cross_interpolation(
-        tensor=tensor, method=method, error_threshold=1e-16, debug=True
+        tensor=tensor, method=method, error_threshold=1e-6, debug=True
     )
 
     print(f"Ranks: {ranks}")
@@ -228,7 +214,28 @@ def debug_tci(test_type):
         if J is not None and len(J) > 0:
             print(f"J_{j}: {torch.Tensor(J)[:, 0, :].size()}")
 
-    plot_logs(logs, method, tensor)
+    # statistics
+    size = list(tensor.size())
+
+    original_params = 1
+    for s in size:
+        original_params *= s
+
+    kept_params = 0
+    for core in cores:
+        kept_params += core.size(0) * core.size(1) * core.size(2)
+
+    print("=" * 50)
+    print("Runtime and Memory Usage " + "-" * 25)
+    print("TCI Statistics " + "-" * 35)
+    print(f"               Size: {list(size)}")
+    print(f"              Ranks: {ranks}")
+    print(f"   Parameter before: {original_params}")
+    print(f"   Parameter  after: {kept_params}")
+    print(f"  Compression ratio: {kept_params / original_params:.3%}")
+    print("=" * 50)
+
+    # plot_logs(logs, method, tensor)
 
 
 def test_tci_image(method):
@@ -481,9 +488,9 @@ def test_theorem_1_conjecture_v2_for_n():
 
 
 def main():
-    test_theorem_1_conjecture_v2_for_d()
+    # test_theorem_1_conjecture_v2_for_d()
     # test_theorem_1_conjecture_v2_for_n()
-    # debug_tci("smooth")
+    debug_tci("random")
     # test_tci_image("full")
 
 

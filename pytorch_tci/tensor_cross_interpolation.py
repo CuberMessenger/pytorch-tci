@@ -233,6 +233,30 @@ def rook_search_query(
 ) -> tuple[int, int, int, int, torch.Tensor]: ...
 
 
+def find_prefix_index(Is_k, m, Is_k_minus_1, k):
+    if k == 1:
+        return 0
+    prefix = tuple(Is_k[dim][m][0] for dim in range(k - 1))
+    r_prev = len(Is_k_minus_1[0])
+    for a in range(r_prev):
+        curr = tuple(Is_k_minus_1[dim][a][0] for dim in range(k - 1))
+        if curr == prefix:
+            return a
+    raise ValueError(f"Prefix not found! {prefix}")
+
+
+def find_suffix_index(Js_k_plus_1, m, Js_k_plus_2, dimension, k):
+    if k == dimension - 1:
+        return 0
+    suffix_len = dimension - k - 1
+    suffix = tuple(Js_k_plus_1[dim + 1][0][m] for dim in range(suffix_len))
+    r_next = len(Js_k_plus_2[0][0])
+    for b in range(r_next):
+        curr = tuple(Js_k_plus_2[dim][0][b] for dim in range(suffix_len))
+        if curr == suffix:
+            return b
+    raise ValueError(f"Suffix not found! {suffix}")
+
 def sweep_one(
     k,
     dimension,
@@ -255,6 +279,27 @@ def sweep_one(
     )
     # print(f"k = {k}, superblock: {list(superblock.size())}")
     # r_{k - 1} * n_k, n_{k + 1} * r_{k + 2}
+
+    ## Search ill pivots
+    if len(Is[k]) > 0 and len(Is[k][0]) > 0:
+        M = superblock.abs().max().item()
+        E = superblock.clone()
+        r_k = len(Is[k][0])
+        print(f"--- Checking {r_k} old pivots for k={k} ---")
+        for m in range(r_k):
+            a_m = find_prefix_index(Is[k], m, Is[k - 1], k)
+            i_m = Is[k][k - 1][m][0]
+            j_m = Js[k + 1][0][0][m]
+            b_m = find_suffix_index(Js[k + 1], m, Js[k + 2], dimension, k)
+            
+            ep = E[a_m, i_m, j_m, b_m].item()
+            print(f"  Pivot {m}: index=({a_m}, {i_m}, {j_m}, {b_m}), ep={ep:.3e}, rel_ep={abs(ep)/M if M > 0 else 0:.2%}")
+            
+            if abs(ep) > 1e-12:
+                col = E[:, :, j_m, b_m]
+                row = E[a_m, i_m, :, :]
+                E -= torch.einsum('ai,jb->aijb', col, row) / ep
+        print(f"----------------------------------------")
 
     ## form the superblock approximation using current Is, Js
 
